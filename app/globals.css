@@ -272,11 +272,20 @@ a.payout-value:hover { text-decoration: underline; }
 /* FOOTER */
 footer {
   max-width: 1600px; margin: 24px auto 0; padding: 16px 20px;
-  border-top: 1px solid var(--border); font-size: 11px; color: var(--text-faint); text-align: center;
+  border-top: 1px solid var(--border); font-size: 11px; color: var(--text-faint);
 }
+.footer-inner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+footer p { max-width: none; margin: 0; }
 footer a { color: var(--text-muted); text-decoration: none; }
 footer a:hover { color: var(--accent); }
-footer p { max-width: none; margin-bottom: 6px; }
+.github-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0;
+  color: var(--text-faint); transition: color 0.15s;
+}
+.github-link:hover { color: var(--text); }
 
 /* LIVE TAB */
 .live-tab {
