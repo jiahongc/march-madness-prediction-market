@@ -377,9 +377,19 @@ footer a:hover { color: var(--accent); }
 }
 .live-card-bet:hover { opacity: 0.85; }
 
+/* MOBILE CARD LIST */
+.mobile-card-list {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.mobile-card-list .matchup {
+  width: 100%;
+}
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .region-selector { overflow-x: auto; }
+  .region-selector { overflow-x: auto; flex-wrap: nowrap; }
   .region-btn { padding: 6px 14px; font-size: 12px; white-space: nowrap; }
-  .header-right { gap: 8px; }
+  .live-games-grid { grid-template-columns: 1fr; }
+  .status-bar { flex-wrap: wrap; font-size: 10px; }
+  .footer-inner { flex-direction: column; gap: 8px; text-align: center; }
 }

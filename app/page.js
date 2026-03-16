@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { DEFAULT_REGIONS } from "../lib/default-data";
 
 // ── Helpers ──────────────────────────────────────────────
@@ -91,6 +91,16 @@ export default function BracketPage() {
   });
   const [currentRegion, setCurrentRegion] = useState("east");
   const [modalGame, setModalGame] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const prevLiveCount = useRef(0);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const refreshData = useCallback(async () => {
     try {
@@ -138,6 +148,14 @@ export default function BracketPage() {
     return result;
   }, [regions]);
 
+  // Auto-switch to Live tab when first game tips off
+  useEffect(() => {
+    if (liveGames.length > 0 && prevLiveCount.current === 0) {
+      setCurrentRegion("live");
+    }
+    prevLiveCount.current = liveGames.length;
+  }, [liveGames.length]);
+
   const isLiveView = currentRegion === "live";
   const games = isLiveView ? [] : regions[currentRegion].round1;
 
@@ -163,7 +181,7 @@ export default function BracketPage() {
             </svg>
             <div>
               <h1>March Madness 2026</h1>
-              <p className="subtitle">Bracket with Polymarket Odds</p>
+              <p className="subtitle">Bracket with Polymarket Odds · Odds as of Mar 16, 2026</p>
             </div>
           </div>
         </div>
@@ -205,6 +223,13 @@ export default function BracketPage() {
           <div className="live-games-grid">
             {liveGames.map((game, i) => (
               <LiveGameCard key={i} game={game} onClick={() => setModalGame(game)} />
+            ))}
+          </div>
+        ) : isMobile ? (
+          /* Mobile: card list instead of bracket */
+          <div className="mobile-card-list">
+            {games.map((game, i) => (
+              <MatchupCard key={i} game={game} onClick={() => setModalGame(game)} />
             ))}
           </div>
         ) : (
