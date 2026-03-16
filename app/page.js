@@ -200,7 +200,7 @@ export default function BracketPage() {
           {cached && (
             <span className="cache-badge">cached ({cacheAge}s / {cacheTTL}s)</span>
           )}
-          <span className="status-time">Updated {lastUpdated.toLocaleTimeString()}</span>
+          <span className="status-time">Updated {lastUpdated.toLocaleTimeString(undefined, { timeZoneName: "short" })}</span>
         </div>
       )}
 
