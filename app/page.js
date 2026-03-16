@@ -85,6 +85,8 @@ export default function BracketPage() {
     lastUpdated: null,
     liveGames: 0,
     finalGames: 0,
+    oddsSource: "fallback",
+    oddsUpdated: 0,
     cached: false,
     cacheAge: 0,
     cacheTTL: 30,
@@ -116,6 +118,8 @@ export default function BracketPage() {
           rawTimestamp: data.lastUpdated,
           liveGames: data.liveGames,
           finalGames: data.finalGames,
+          oddsSource: data.oddsSource,
+          oddsUpdated: data.oddsUpdated,
           cached: data.cached,
           cacheAge: data.cacheAge,
           cacheTTL: data.cacheTTL,
@@ -181,7 +185,10 @@ export default function BracketPage() {
             </svg>
             <div>
               <h1>March Madness 2026</h1>
-              <p className="subtitle">Bracket with Polymarket Odds · Odds as of Mar 16, 2026</p>
+              <p className="subtitle">
+                Bracket with Polymarket Odds
+                {apiData.oddsSource === "polymarket-live" ? " · Live Odds" : " · Odds as of Mar 16, 2026"}
+              </p>
             </div>
           </div>
         </div>

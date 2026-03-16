@@ -8,6 +8,101 @@ let cache = {
   timestamp: 0,
 };
 
+// ── Polymarket Live Odds ─────────────────────────────────
+// Fetches current prices from the Gamma API using game slugs.
+// Each game's `url` field contains the slug (last path segment).
+const GAMMA_API = "https://gamma-api.polymarket.com";
+
+function collectSlugs(regions) {
+  const slugs = [];
+  for (const regionData of Object.values(regions)) {
+    for (const game of regionData.round1) {
+      const slug = game.url?.split("/").pop();
+      if (slug) slugs.push(slug);
+    }
+  }
+  return slugs;
+}
+
+async function fetchPolymarketOdds(slugs) {
+  // Fetch all markets in parallel, 4 at a time to be respectful
+  const results = new Map();
+  const batchSize = 8;
+  for (let i = 0; i < slugs.length; i += batchSize) {
+    const batch = slugs.slice(i, i + batchSize);
+    const fetches = batch.map(async (slug) => {
+      try {
+        const res = await fetch(`${GAMMA_API}/markets?slug=${slug}`, {
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const market = Array.isArray(data) ? data[0] : data;
+        if (market?.outcomePrices && market?.outcomes) {
+          results.set(slug, market);
+        }
+      } catch {
+        // Skip failed fetches
+      }
+    });
+    await Promise.all(fetches);
+  }
+  return results;
+}
+
+function applyPolymarketOdds(regions, marketData) {
+  let updatedCount = 0;
+  for (const regionData of Object.values(regions)) {
+    for (const game of regionData.round1) {
+      const slug = game.url?.split("/").pop();
+      const market = slug && marketData.get(slug);
+      if (!market?.outcomePrices) continue;
+
+      try {
+        const prices = JSON.parse(market.outcomePrices);
+        const outcomes = typeof market.outcomes === "string"
+          ? JSON.parse(market.outcomes)
+          : (market.outcomes || []);
+        if (prices.length < 2) continue;
+
+        // Match outcomes to our top/bottom teams by name
+        const topName = game.top.team.toLowerCase();
+        const botName = game.bottom.team.toLowerCase();
+
+        let topPrice = null;
+        let botPrice = null;
+
+        for (let i = 0; i < outcomes.length; i++) {
+          const outcomeLower = outcomes[i].toLowerCase();
+          if (outcomeLower.includes(topName) || topName.includes(outcomeLower.split(" ")[0])) {
+            topPrice = parseFloat(prices[i]);
+          } else if (outcomeLower.includes(botName) || botName.includes(outcomeLower.split(" ")[0])) {
+            botPrice = parseFloat(prices[i]);
+          }
+        }
+
+        // If name matching failed, check abbreviations or fall back to position
+        if (topPrice == null && botPrice == null) {
+          topPrice = parseFloat(prices[0]);
+          botPrice = parseFloat(prices[1]);
+        } else if (topPrice == null) {
+          topPrice = 1 - botPrice;
+        } else if (botPrice == null) {
+          botPrice = 1 - topPrice;
+        }
+
+        game.topOdds = topPrice * 100;
+        game.bottomOdds = botPrice * 100;
+        updatedCount++;
+      } catch {
+        // Keep fallback odds
+      }
+    }
+  }
+  return updatedCount;
+}
+
 // ── NCAA Live Scores ─────────────────────────────────────
 const NCAA_API_BASE = "https://ncaa-api.henrygd.me";
 
@@ -26,8 +121,6 @@ async function fetchNcaaScores() {
   }
 }
 
-// Build a lookup index from NCAA games: team name → game data
-// Done once per fetch, avoids O(N*M) quadratic matching
 function buildNcaaIndex(ncaaGames) {
   const index = new Map();
   for (const ncaaGame of ncaaGames) {
@@ -50,7 +143,6 @@ function matchScoreToGame(game, ncaaIndex) {
   const topName = game.top.team.toLowerCase();
   const botName = game.bottom.team.toLowerCase();
 
-  // Try exact match first, then scan for includes
   let ncaaGame = null;
   for (const [name, g] of ncaaIndex) {
     if (name.includes(topName) || name.includes(botName)) {
@@ -77,12 +169,11 @@ function matchScoreToGame(game, ncaaIndex) {
 
 function applyLiveScores(regions, ncaaGames) {
   const ncaaIndex = buildNcaaIndex(ncaaGames);
-  const updated = JSON.parse(JSON.stringify(regions));
   let liveCount = 0;
   let finalCount = 0;
 
-  for (const regionKey of Object.keys(updated)) {
-    const games = updated[regionKey]?.round1;
+  for (const regionData of Object.values(regions)) {
+    const games = regionData?.round1;
     if (!games) continue;
 
     for (const game of games) {
@@ -95,7 +186,7 @@ function applyLiveScores(regions, ncaaGames) {
     }
   }
 
-  return { regions: updated, liveCount, finalCount };
+  return { liveCount, finalCount };
 }
 
 // ── GET handler ──────────────────────────────────────────
@@ -111,17 +202,29 @@ export async function GET() {
     });
   }
 
-  const ncaaGames = await fetchNcaaScores();
+  // Deep clone fallback data so we can mutate it
+  const regions = JSON.parse(JSON.stringify(DEFAULT_REGIONS));
 
-  const { regions, liveCount, finalCount } = ncaaGames.length > 0
-    ? applyLiveScores(DEFAULT_REGIONS, ncaaGames)
-    : { regions: DEFAULT_REGIONS, liveCount: 0, finalCount: 0 };
+  // Fetch Polymarket odds and NCAA scores in parallel
+  const slugs = collectSlugs(regions);
+  const [marketData, ncaaGames] = await Promise.all([
+    fetchPolymarketOdds(slugs),
+    fetchNcaaScores(),
+  ]);
+
+  // Apply live data
+  const oddsUpdated = applyPolymarketOdds(regions, marketData);
+  const { liveCount, finalCount } = ncaaGames.length > 0
+    ? applyLiveScores(regions, ncaaGames)
+    : { liveCount: 0, finalCount: 0 };
 
   const result = {
     regions,
     lastUpdated: new Date().toISOString(),
     liveGames: liveCount,
     finalGames: finalCount,
+    oddsUpdated,
+    oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
   };
 
   cache = { data: result, timestamp: now };
