@@ -58,6 +58,10 @@ function matchupsToGames(matchups) {
 function buildNextRound(games) {
   const nextRound = [];
   for (let i = 0; i < games.length; i += 2) {
+    if (!games[i] || !games[i + 1]) {
+      nextRound.push(null);
+      continue;
+    }
     const winner1 = getWinner(games[i]);
     const winner2 = getWinner(games[i + 1]);
     if (winner1 && winner2) {
