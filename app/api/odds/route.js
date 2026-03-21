@@ -126,10 +126,12 @@ async function fetchAllScores() {
   const today = new Date();
   const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
   const tournamentStart = new Date("2026-03-17");
+  const tournamentEnd = new Date("2026-04-10"); // Championship + buffer
+  const endDate = today < tournamentEnd ? today : tournamentEnd;
   const allEvents = [];
 
   const datesToFetch = [];
-  for (let d = new Date(tournamentStart); d <= today; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(tournamentStart); d <= endDate; d.setDate(d.getDate() + 1)) {
     const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     if (dateStr !== todayStr && pastDayScores.has(dateStr)) {
       allEvents.push(...pastDayScores.get(dateStr));
@@ -143,7 +145,11 @@ async function fetchAllScores() {
     for (let i = 0; i < datesToFetch.length; i++) {
       const dateStr = datesToFetch[i];
       const events = results[i];
-      if (dateStr !== todayStr && events.length > 0) {
+      // Only cache past days where all events are final (not live/scheduled)
+      const allFinal = events.length > 0 && events.every((e) =>
+        e.status?.type?.name === "STATUS_FINAL"
+      );
+      if (dateStr !== todayStr && allFinal) {
         pastDayScores.set(dateStr, events);
       }
       allEvents.push(...events);
@@ -238,24 +244,24 @@ function matchEspnGame(game, espnIndex, uniqueEvents) {
 
   // Find which ESPN team is our top/bottom
   let topScore = null, bottomScore = null;
-  for (const t of teams) {
+  let topMatchIdx = -1, botMatchIdx = -1;
+  for (let ti = 0; ti < teams.length; ti++) {
+    const t = teams[ti];
     const tName = t.team?.displayName?.toLowerCase() || "";
     const tShort = t.team?.shortDisplayName?.toLowerCase() || "";
     const tAbbr = t.team?.abbreviation?.toLowerCase() || "";
     const isTop = namesMatch(tName, topName) || namesMatch(tShort, topName) || tAbbr === topAbbr;
     const isBot = namesMatch(tName, botName) || namesMatch(tShort, botName) || tAbbr === botAbbr;
-    if (isTop && topScore === null) topScore = t.score;
-    else if (isBot && bottomScore === null) bottomScore = t.score;
+    if (isTop && topMatchIdx === -1) { topScore = t.score; topMatchIdx = ti; }
+    else if (isBot && botMatchIdx === -1) { bottomScore = t.score; botMatchIdx = ti; }
   }
-  // If one side matched but not the other, assign the remaining team
-  if (topScore !== null && bottomScore === null) {
-    for (const t of teams) {
-      if (t.score !== topScore) { bottomScore = t.score; break; }
-    }
-  } else if (bottomScore !== null && topScore === null) {
-    for (const t of teams) {
-      if (t.score !== bottomScore) { topScore = t.score; break; }
-    }
+  // If one side matched but not the other, assign the remaining team by index
+  if (topMatchIdx >= 0 && botMatchIdx === -1) {
+    const other = teams.find((_, i) => i !== topMatchIdx);
+    if (other) bottomScore = other.score;
+  } else if (botMatchIdx >= 0 && topMatchIdx === -1) {
+    const other = teams.find((_, i) => i !== botMatchIdx);
+    if (other) topScore = other.score;
   }
 
   const periodLabel = statusType === "STATUS_HALFTIME" ? "HALFTIME"
@@ -328,6 +334,7 @@ function getWinnerFromGame(game) {
   if (!game.liveScore || game.liveScore.status !== "final") return null;
   const topScore = parseInt(game.liveScore.topScore) || 0;
   const botScore = parseInt(game.liveScore.bottomScore) || 0;
+  if (topScore === botScore) return null;
   return topScore > botScore ? game.top : game.bottom;
 }
 
@@ -454,20 +461,22 @@ function applyRound2Data(regions, round2OddsMap) {
 
 // ── Team Logos from ESPN ─────────────────────────────────
 function applyTeamLogos(regions, espnEvents) {
-  // Build a map of team name → logo URL from ESPN data
-  const logoMap = new Map();
+  // Build a map of team shortName → logo URL, keyed by exact short name
+  const logoEntries = []; // { displayName, shortName, abbr, logoUrl }
   for (const event of espnEvents) {
     const comps = event.competitions?.[0];
     if (!comps) continue;
     for (const c of comps.competitors || []) {
-      const name = c.team?.displayName?.toLowerCase();
-      const shortName = c.team?.shortDisplayName?.toLowerCase();
       const logo = c.team?.logo;
       const id = c.team?.id;
       const logoUrl = logo || (id ? `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png` : null);
       if (logoUrl) {
-        if (name) logoMap.set(name, logoUrl);
-        if (shortName) logoMap.set(shortName, logoUrl);
+        logoEntries.push({
+          displayName: c.team?.displayName?.toLowerCase() || "",
+          shortName: c.team?.shortDisplayName?.toLowerCase() || "",
+          abbr: c.team?.abbreviation?.toLowerCase() || "",
+          logoUrl,
+        });
       }
     }
   }
@@ -476,12 +485,20 @@ function applyTeamLogos(regions, espnEvents) {
     for (const game of regionData.round1) {
       for (const side of [game.top, game.bottom]) {
         const name = side.team.toLowerCase();
-        for (const [key, url] of logoMap) {
-          if (namesMatch(key, name)) {
-            side.logo = url;
-            break;
-          }
+        const abbr = side.abbr?.toLowerCase() || "";
+        // 1. Try exact short name match first
+        let match = logoEntries.find((e) => e.shortName === name);
+        // 2. Try abbreviation match
+        if (!match && abbr) match = logoEntries.find((e) => e.abbr === abbr);
+        // 3. Try exact display name contains
+        if (!match) match = logoEntries.find((e) => e.displayName.startsWith(name + " ") || e.displayName === name);
+        // 4. Fallback to namesMatch (but skip ambiguous short names)
+        if (!match) {
+          match = logoEntries.find((e) =>
+            e.shortName.length > 4 && namesMatch(e.shortName, name)
+          );
         }
+        if (match) side.logo = match.logoUrl;
       }
     }
   }

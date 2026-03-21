@@ -50,6 +50,7 @@ function getWinner(game) {
   if (!isFinal(game)) return null;
   const topScore = parseInt(game.liveScore.topScore) || 0;
   const botScore = parseInt(game.liveScore.bottomScore) || 0;
+  if (topScore === botScore) return null;
   return topScore > botScore ? game.top : game.bottom;
 }
 
@@ -184,11 +185,18 @@ export default function BracketPage() {
   const [modalGame, setModalGame] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const prevLiveCount = useRef(0);
+  const initialLoadDone = useRef(false);
 
-  // Detect mobile viewport
+  // Detect mobile viewport and default to region view on mobile
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
+    if (!initialLoadDone.current && window.innerWidth < 768) {
+      setCurrentRegion("east");
+      initialLoadDone.current = true;
+    } else {
+      initialLoadDone.current = true;
+    }
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
@@ -433,21 +441,34 @@ export default function BracketPage() {
 
 // ── Final Four Slot ──────────────────────────────────────
 function FFSlot({ roundA, roundB, labelA, labelB }) {
-  if (roundA?.decided && roundB?.decided) {
-    const winnerA = getWinner({ ...roundA, liveScore: null }) || roundA.top;
-    const winnerB = getWinner({ ...roundB, liveScore: null }) || roundB.top;
+  // roundA/roundB are Elite 8 matchups (round4[0] from each region)
+  // If decided, both teams are known — show who's playing in the Elite 8
+  // The FF matchup is the WINNER of roundA vs WINNER of roundB
+  const winnerA = roundA?.decided ? getWinner({ top: roundA.top, bottom: roundA.bottom, liveScore: roundA.liveScore || null }) : null;
+  const winnerB = roundB?.decided ? getWinner({ top: roundB.top, bottom: roundB.bottom, liveScore: roundB.liveScore || null }) : null;
+
+  if (winnerA && winnerB) {
     return (
       <div className="ff-slot">
         <AdvancedSlot matchup={{ top: winnerA, bottom: winnerB, decided: true }} />
       </div>
     );
   }
+
+  // Show region labels with known teams if available
+  const labelOrTeam = (round, label) => {
+    if (!round) return label;
+    if (round.decided) return `${round.top.team} / ${round.bottom.team}`;
+    const known = round.top || round.bottom;
+    return known ? `${known.team} / ...` : label;
+  };
+
   return (
     <div className="ff-slot">
       <div className="future-slot ff-future">
-        <span>{labelA}</span>
+        <span>{labelOrTeam(roundA, labelA)}</span>
         <span className="ff-vs">vs</span>
-        <span>{labelB}</span>
+        <span>{labelOrTeam(roundB, labelB)}</span>
       </div>
     </div>
   );
@@ -664,8 +685,9 @@ function MatchupCard({ game, onClick }) {
   const topLeading = gameLive && parseInt(game.liveScore.topScore) > parseInt(game.liveScore.bottomScore);
   const botLeading = gameLive && parseInt(game.liveScore.bottomScore) > parseInt(game.liveScore.topScore);
 
-  // Upset watch: lower seed (higher number) has > 30% odds
-  const isUpset = !gameOver && !gameLive && (
+  // Upset watch: lower seed (higher number) has > 30% odds AND seed gap >= 3
+  const seedGap = Math.abs(game.top.seed - game.bottom.seed);
+  const isUpset = !gameOver && !gameLive && seedGap >= 3 && (
     (game.top.seed > game.bottom.seed && topPct > 30) ||
     (game.bottom.seed > game.top.seed && botPct > 30)
   );
@@ -704,9 +726,9 @@ function MatchupCard({ game, onClick }) {
         ) : null}
       </div>
 
-      {!gameOver && (
+      {!gameOver && topPct > 0 && (
         <>
-          {gameLive && topPct ? (
+          {gameLive && (
             <div className="live-odds-row">
               <a className={`odds-badge ${oddsClass(topPct)}`} href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
                 {game.top.abbr} {Math.round(topPct)}%
@@ -715,7 +737,7 @@ function MatchupCard({ game, onClick }) {
                 {game.bottom.abbr} {Math.round(botPct)}%
               </a>
             </div>
-          ) : null}
+          )}
           <div className="payout-header">Profit on $100 bet</div>
           <div className="payout-bar">
             <div className="payout-side">
