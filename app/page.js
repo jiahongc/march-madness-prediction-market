@@ -395,7 +395,9 @@ export default function BracketPage() {
               if (!["east","south","west","midwest"].includes(currentRegion)) setCurrentRegion("east");
             }}
           >
-            Region
+            {["east","south","west","midwest"].includes(currentRegion)
+              ? currentRegion.charAt(0).toUpperCase() + currentRegion.slice(1)
+              : "Region"}
           </button>
         </div>
         <button className={`region-btn ${currentRegion === "schedule" ? "active" : ""}`} onClick={() => setCurrentRegion("schedule")}>
