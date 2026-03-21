@@ -607,25 +607,22 @@ function MatchupCard({ game, onClick }) {
                 {game.bottom.abbr} {Math.round(botPct)}%
               </a>
             </div>
-          ) : !gameLive ? (
-            <>
-              <div className="payout-header">Profit on $100 bet</div>
-              <div className="payout-bar">
-                <div className="payout-side">
-                  <span className="payout-label">{game.top.abbr} wins</span>
-                  <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
-                    {formatPayout(topPct)}
-                  </a>
-                </div>
-                <div className="payout-side">
-                  <span className="payout-label">{game.bottom.abbr} wins</span>
-                  <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
-                    {formatPayout(botPct)}
-                  </a>
-                </div>
-              </div>
-            </>
           ) : null}
+          <div className="payout-header">Profit on $100 bet</div>
+          <div className="payout-bar">
+            <div className="payout-side">
+              <span className="payout-label">{game.top.abbr} wins</span>
+              <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                {formatPayout(topPct)}
+              </a>
+            </div>
+            <div className="payout-side">
+              <span className="payout-label">{game.bottom.abbr} wins</span>
+              <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                {formatPayout(botPct)}
+              </a>
+            </div>
+          </div>
         </>
       )}
 
