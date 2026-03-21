@@ -307,7 +307,8 @@ export default function BracketPage() {
 
   const isLiveView = currentRegion === "live";
   const isFullView = currentRegion === "full";
-  const skipBracket = isLiveView || isFullView || isFuturesView;
+  const isScheduleView = currentRegion === "schedule";
+  const skipBracket = isLiveView || isFullView || isFuturesView || isScheduleView;
   const games = skipBracket ? [] : regions[currentRegion]?.round1 || [];
 
   // Build advancement for later rounds (memoized, skipped on non-bracket views)
@@ -366,22 +367,24 @@ export default function BracketPage() {
             {r.charAt(0).toUpperCase() + r.slice(1)}
           </button>
         ))}
-        <button className={`region-btn ${currentRegion === "futures" ? "active" : ""}`} onClick={() => setCurrentRegion("futures")}>
-          Futures
-        </button>
         {liveGames.length > 0 && (
           <button className={`region-btn live-tab ${currentRegion === "live" ? "active" : ""}`} onClick={() => setCurrentRegion("live")}>
             <span className="live-tab-dot" />
             Live ({liveGames.length})
           </button>
         )}
+        <button className={`region-btn ${currentRegion === "schedule" ? "active" : ""}`} onClick={() => setCurrentRegion("schedule")}>
+          Schedule
+        </button>
+        <button className={`region-btn ${currentRegion === "futures" ? "active" : ""}`} onClick={() => setCurrentRegion("futures")}>
+          Futures
+        </button>
       </div>
 
       <main id="bracket-main">
-        {schedule.length > 0 && !isFuturesView && (
+        {currentRegion === "schedule" ? (
           <ScheduleView schedule={schedule} />
-        )}
-        {isFuturesView ? (
+        ) : isFuturesView ? (
           <FuturesView futures={futures} />
         ) : isFullView ? (
           <FullBracketView regions={regions} onGameClick={setModalGame} />
