@@ -289,7 +289,7 @@ footer a:hover { color: var(--accent); }
 
 /* LIVE TAB */
 .live-tab {
-  display: flex; align-items: center; gap: 5px; margin-left: auto;
+  display: flex; align-items: center; gap: 5px;
 }
 .live-tab:not(.active) { color: var(--accent-text); }
 .live-tab.active { background: var(--accent); color: #fff; }
