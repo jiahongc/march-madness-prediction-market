@@ -150,13 +150,29 @@ function buildNcaaIndex(ncaaGames) {
   return index;
 }
 
+function namesMatch(a, b) {
+  // Check if two team name strings refer to the same team
+  if (a.includes(b) || b.includes(a)) return true;
+  // Handle common mismatches: "Michigan St." vs "Michigan St"
+  const normalize = (s) => s.replace(/\./g, "").replace(/'/g, "'").trim();
+  const an = normalize(a), bn = normalize(b);
+  if (an.includes(bn) || bn.includes(an)) return true;
+  // Check first word match for short names (e.g. "louisville" matches "louisville")
+  const aFirst = an.split(" ")[0], bFirst = bn.split(" ")[0];
+  if (aFirst.length >= 4 && aFirst === bFirst) return true;
+  return false;
+}
+
 function matchScoreToGame(game, ncaaIndex) {
   const topName = game.top.team.toLowerCase();
   const botName = game.bottom.team.toLowerCase();
+  const topAbbr = game.top.abbr?.toLowerCase() || "";
+  const botAbbr = game.bottom.abbr?.toLowerCase() || "";
 
   let ncaaGame = null;
   for (const [name, g] of ncaaIndex) {
-    if (name.includes(topName) || name.includes(botName)) {
+    if (namesMatch(name, topName) || namesMatch(name, botName) ||
+        (topAbbr && name.includes(topAbbr)) || (botAbbr && name.includes(botAbbr))) {
       ncaaGame = g;
       break;
     }
@@ -166,7 +182,7 @@ function matchScoreToGame(game, ncaaIndex) {
   const gameData = ncaaGame.game || {};
   const home = gameData.home?.names?.short?.toLowerCase() || "";
   const homeFull = gameData.home?.names?.full?.toLowerCase() || "";
-  const isTopHome = home.includes(topName) || homeFull.includes(topName);
+  const isTopHome = namesMatch(home, topName) || namesMatch(homeFull, topName);
 
   return {
     status: gameData.gameState || gameData.status || "pre",
@@ -229,27 +245,7 @@ export async function GET() {
     ? applyLiveScores(regions, ncaaGames)
     : { liveCount: 0, finalCount: 0 };
 
-  // Mark games as resolved when Polymarket odds are 100/0 but no NCAA score
-  let resolvedCount = 0;
-  for (const regionData of Object.values(regions)) {
-    for (const game of regionData.round1) {
-      if (game.liveScore) continue; // already has score data
-      const top = game.topOdds;
-      const bot = game.bottomOdds;
-      if ((top >= 99 && bot <= 1) || (bot >= 99 && top <= 1)) {
-        const topWon = top > bot;
-        game.liveScore = {
-          status: "final",
-          period: "FINAL",
-          clock: "",
-          topScore: topWon ? "W" : "L",
-          bottomScore: topWon ? "L" : "W",
-        };
-        resolvedCount++;
-      }
-    }
-  }
-  const finalCount = scoreFinalCount + resolvedCount;
+  const finalCount = scoreFinalCount;
 
   const result = {
     regions,
