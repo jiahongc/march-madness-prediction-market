@@ -82,11 +82,55 @@ header { background: var(--surface); border-bottom: 1px solid var(--border); pos
 
 /* BRACKET */
 main { max-width: 1600px; margin: 0 auto; padding: 16px 20px; }
+main:has(.full-bracket-scroll) { max-width: none; }
 .bracket-scroll { overflow-x: auto; padding-bottom: 12px; }
 .bracket {
   display: grid;
   grid-template-columns: 230px 36px 230px 36px 230px 36px 230px 36px 230px;
   gap: 0; min-width: 1280px;
+}
+
+/* FULL BRACKET */
+.full-bracket-scroll { overflow-x: auto; padding-bottom: 12px; }
+.full-bracket-container {
+  display: flex; gap: 0; min-width: 2200px; align-items: stretch;
+}
+.full-bracket-half { flex: 1; display: flex; flex-direction: column; gap: 24px; }
+.half-bracket-region { position: relative; }
+.half-bracket-name {
+  font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent-text); padding: 0 0 6px 4px;
+}
+.half-bracket {
+  display: grid;
+  grid-template-columns: 180px 30px 180px 30px 180px 30px 180px;
+  gap: 0; min-width: 810px;
+}
+.bracket-mirrored {
+  direction: rtl;
+}
+.bracket-mirrored > * { direction: ltr; }
+.bracket-mirrored .round-col { direction: ltr; }
+.bracket-mirrored .connector-col { direction: ltr; }
+.full-bracket-center {
+  width: 180px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; padding: 0 12px;
+}
+.ff-label {
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent-text); text-align: center;
+}
+.ff-slots { display: flex; flex-direction: column; gap: 24px; align-items: center; width: 100%; }
+.ff-slot { width: 100%; }
+.ff-future {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 11px; font-weight: 700; color: var(--text-faint); padding: 12px 8px;
+}
+.ff-vs { font-size: 9px; text-transform: uppercase; opacity: 0.5; }
+.ff-championship { width: 100%; }
+.ff-champ {
+  font-size: 13px; font-weight: 800; text-align: center; padding: 16px 8px;
+  background: var(--accent-bg); border-color: var(--accent); color: var(--accent-text);
 }
 .round-col { display: flex; flex-direction: column; gap: 0; }
 .round-col > div { padding: 6px 0; }
@@ -182,6 +226,12 @@ main { max-width: 1600px; margin: 0 auto; padding: 16px 20px; }
 .team-row.leading { background: var(--accent-bg); }
 .team-row.leading .tname { font-weight: 800; }
 .score-leading { color: var(--accent-text); }
+
+.live-odds-row {
+  display: flex; justify-content: center; gap: 8px; padding: 4px 8px;
+  border-top: 1px solid var(--divider); background: var(--surface-2);
+}
+.live-odds-row .odds-badge { font-size: 9px; }
 
 /* FINISHED GAME STATES */
 .matchup-final { opacity: 0.95; }

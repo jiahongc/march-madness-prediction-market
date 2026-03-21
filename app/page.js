@@ -165,16 +165,17 @@ export default function BracketPage() {
   }, [liveGames.length]);
 
   const isLiveView = currentRegion === "live";
-  const games = isLiveView ? [] : regions[currentRegion].round1;
+  const isFullView = currentRegion === "full";
+  const games = (isLiveView || isFullView) ? [] : regions[currentRegion].round1;
 
   // Build advancement for later rounds (memoized, skipped on live view)
   const { round2, round3, round4 } = useMemo(() => {
-    if (isLiveView) return { round2: [], round3: [], round4: [] };
+    if (isLiveView || isFullView) return { round2: [], round3: [], round4: [] };
     const r2 = buildNextRound(games);
     const r3 = buildNextRound(matchupsToGames(r2));
     const r4 = buildNextRound(matchupsToGames(r3));
     return { round2: r2, round3: r3, round4: r4 };
-  }, [games, isLiveView]);
+  }, [games, isLiveView, isFullView]);
 
   return (
     <>
@@ -227,10 +228,15 @@ export default function BracketPage() {
             Live ({liveGames.length})
           </button>
         )}
+        <button className={`region-btn ${currentRegion === "full" ? "active" : ""}`} onClick={() => setCurrentRegion("full")}>
+          Full Bracket
+        </button>
       </div>
 
       <main id="bracket-main">
-        {isLiveView ? (
+        {isFullView ? (
+          <FullBracketView regions={regions} onGameClick={setModalGame} />
+        ) : isLiveView ? (
           <div className="live-games-grid">
             {liveGames.map((game, i) => (
               <LiveGameCard key={i} game={game} onClick={() => setModalGame(game)} />
@@ -332,18 +338,159 @@ export default function BracketPage() {
   );
 }
 
+// ── Full Bracket View ────────────────────────────────────
+function calcRegionRounds(regionData) {
+  const games = regionData.round1;
+  const r2 = buildNextRound(games);
+  const r3 = buildNextRound(matchupsToGames(r2));
+  const r4 = buildNextRound(matchupsToGames(r3));
+  return { games, round2: r2, round3: r3, round4: r4 };
+}
+
+function FullBracketView({ regions, onGameClick }) {
+  const allRounds = useMemo(() => ({
+    east: calcRegionRounds(regions.east),
+    south: calcRegionRounds(regions.south),
+    west: calcRegionRounds(regions.west),
+    midwest: calcRegionRounds(regions.midwest),
+  }), [regions]);
+
+  return (
+    <div className="full-bracket-scroll">
+      <div className="full-bracket-container">
+        {/* Left half: East + South flowing left→right */}
+        <div className="full-bracket-half">
+          <HalfBracket name="East" rounds={allRounds.east} onGameClick={onGameClick} />
+          <HalfBracket name="South" rounds={allRounds.south} onGameClick={onGameClick} />
+        </div>
+
+        {/* Center: Final Four + Championship */}
+        <div className="full-bracket-center">
+          <div className="ff-label">Final Four</div>
+          <div className="ff-slots">
+            <div className="ff-slot">
+              {allRounds.east.round4[0]?.decided && allRounds.south.round4[0]?.decided ? (
+                <AdvancedSlot matchup={{ top: getWinner({ ...allRounds.east.round4[0], top: allRounds.east.round4[0].top, bottom: allRounds.east.round4[0].bottom, liveScore: null }) || allRounds.east.round4[0]?.top, bottom: getWinner({ ...allRounds.south.round4[0], top: allRounds.south.round4[0].top, bottom: allRounds.south.round4[0].bottom, liveScore: null }) || allRounds.south.round4[0]?.top, decided: true }} />
+              ) : (
+                <div className="future-slot ff-future">
+                  <span>{allRounds.east.round4[0] ? "East" : "East"}</span>
+                  <span className="ff-vs">vs</span>
+                  <span>{allRounds.south.round4[0] ? "South" : "South"}</span>
+                </div>
+              )}
+            </div>
+            <div className="ff-championship">
+              <div className="future-slot ff-champ">&#127942; Championship</div>
+            </div>
+            <div className="ff-slot">
+              {allRounds.west.round4[0]?.decided && allRounds.midwest.round4[0]?.decided ? (
+                <AdvancedSlot matchup={{ top: getWinner({ ...allRounds.west.round4[0], top: allRounds.west.round4[0].top, bottom: allRounds.west.round4[0].bottom, liveScore: null }) || allRounds.west.round4[0]?.top, bottom: getWinner({ ...allRounds.midwest.round4[0], top: allRounds.midwest.round4[0].top, bottom: allRounds.midwest.round4[0].bottom, liveScore: null }) || allRounds.midwest.round4[0]?.top, decided: true }} />
+              ) : (
+                <div className="future-slot ff-future">
+                  <span>{allRounds.west.round4[0] ? "West" : "West"}</span>
+                  <span className="ff-vs">vs</span>
+                  <span>{allRounds.midwest.round4[0] ? "Midwest" : "Midwest"}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right half: West + Midwest flowing right→left (mirrored) */}
+        <div className="full-bracket-half">
+          <HalfBracket name="West" rounds={allRounds.west} onGameClick={onGameClick} mirrored />
+          <HalfBracket name="Midwest" rounds={allRounds.midwest} onGameClick={onGameClick} mirrored />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HalfBracket({ name, rounds, onGameClick, mirrored }) {
+  const { games, round2, round3, round4 } = rounds;
+
+  const cols = (
+    <>
+      <div className="round-col">
+        <div className="round-label">First Round</div>
+        {games.map((game, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
+            <MatchupCard game={game} onClick={() => onGameClick(game)} />
+          </div>
+        ))}
+      </div>
+
+      <ConnectorCol count={4} flex={2} mirrored={mirrored} />
+
+      <div className="round-col">
+        <div className="round-label">Round of 32</div>
+        {round2.map((matchup, i) => (
+          <div key={i} style={{ flex: 2, display: "flex", alignItems: "center" }}>
+            {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
+          </div>
+        ))}
+      </div>
+
+      <ConnectorCol count={2} flex={4} mirrored={mirrored} />
+
+      <div className="round-col">
+        <div className="round-label">Sweet 16</div>
+        {round3.map((matchup, i) => (
+          <div key={i} style={{ flex: 4, display: "flex", alignItems: "center" }}>
+            {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
+          </div>
+        ))}
+        {round3.length < 2 && Array.from({ length: 2 - round3.length }).map((_, i) => (
+          <div key={`empty-${i}`} style={{ flex: 4, display: "flex", alignItems: "center" }}>
+            <div className="future-slot">TBD</div>
+          </div>
+        ))}
+      </div>
+
+      <ConnectorCol count={1} flex={8} mirrored={mirrored} />
+
+      <div className="round-col">
+        <div className="round-label">Elite 8</div>
+        <div style={{ flex: 8, display: "flex", alignItems: "center" }}>
+          {round4[0] ? <AdvancedSlot matchup={round4[0]} /> : <div className="future-slot">TBD</div>}
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="half-bracket-region">
+      <div className="half-bracket-name">{name}</div>
+      <div className={`bracket half-bracket ${mirrored ? "bracket-mirrored" : ""}`}>
+        {cols}
+      </div>
+    </div>
+  );
+}
+
 // ── Connector Column ────────────────────────────────────
-const ConnectorCol = memo(function ConnectorCol({ count, flex }) {
+const ConnectorCol = memo(function ConnectorCol({ count, flex, mirrored }) {
   return (
     <div className="connector-col">
       <div className="round-label">&nbsp;</div>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="conn-group" style={{ flex }}>
           <svg width="100%" height="100%" style={{ position: "absolute", top: 0, left: 0 }}>
-            <line x1="0" y1="25%" x2="50%" y2="25%" stroke="var(--connector)" strokeWidth="1.5" />
-            <line x1="0" y1="75%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
-            <line x1="50%" y1="25%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
-            <line x1="50%" y1="50%" x2="100%" y2="50%" stroke="var(--connector)" strokeWidth="1.5" />
+            {mirrored ? (
+              <>
+                <line x1="100%" y1="25%" x2="50%" y2="25%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="100%" y1="75%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="50%" y1="25%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="50%" y1="50%" x2="0" y2="50%" stroke="var(--connector)" strokeWidth="1.5" />
+              </>
+            ) : (
+              <>
+                <line x1="0" y1="25%" x2="50%" y2="25%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="0" y1="75%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="50%" y1="25%" x2="50%" y2="75%" stroke="var(--connector)" strokeWidth="1.5" />
+                <line x1="50%" y1="50%" x2="100%" y2="50%" stroke="var(--connector)" strokeWidth="1.5" />
+              </>
+            )}
           </svg>
         </div>
       ))}
@@ -440,23 +587,36 @@ function MatchupCard({ game, onClick }) {
         ) : null}
       </div>
 
-      {!gameOver && !gameLive && (
+      {!gameOver && (
         <>
-          <div className="payout-header">Profit on $100 bet</div>
-          <div className="payout-bar">
-            <div className="payout-side">
-              <span className="payout-label">{game.top.abbr} wins</span>
-              <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
-                {formatPayout(topPct)}
+          {gameLive && topPct ? (
+            <div className="live-odds-row">
+              <a className={`odds-badge ${oddsClass(topPct)}`} href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                {game.top.abbr} {Math.round(topPct)}%
+              </a>
+              <a className={`odds-badge ${oddsClass(botPct)}`} href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                {game.bottom.abbr} {Math.round(botPct)}%
               </a>
             </div>
-            <div className="payout-side">
-              <span className="payout-label">{game.bottom.abbr} wins</span>
-              <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
-                {formatPayout(botPct)}
-              </a>
-            </div>
-          </div>
+          ) : !gameLive ? (
+            <>
+              <div className="payout-header">Profit on $100 bet</div>
+              <div className="payout-bar">
+                <div className="payout-side">
+                  <span className="payout-label">{game.top.abbr} wins</span>
+                  <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                    {formatPayout(topPct)}
+                  </a>
+                </div>
+                <div className="payout-side">
+                  <span className="payout-label">{game.bottom.abbr} wins</span>
+                  <a className="payout-value" href={game.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+                    {formatPayout(botPct)}
+                  </a>
+                </div>
+              </div>
+            </>
+          ) : null}
         </>
       )}
 
