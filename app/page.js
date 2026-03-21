@@ -354,40 +354,50 @@ export default function BracketPage() {
         </div>
       </header>
 
-      {lastUpdated && (
+      {lastUpdated && liveCount === 0 && (
         <div className="status-bar">
-          <span className={`status-dot ${liveCount > 0 ? "live" : "stale"}`} />
-          {liveCount > 0 ? (
-            <span className="source-tag ncaa-tag">{liveCount} bracket {liveCount === 1 ? "game" : "games"} live</span>
-          ) : nextGame ? (
+          <span className={`status-dot stale`} />
+          {nextGame ? (
             <NextGameCountdown nextGame={nextGame} />
           ) : finalCount > 0 ? (
             `${finalCount} bracket ${finalCount === 1 ? "game" : "games"} completed today`
           ) : (
             "No bracket games in progress"
           )}
-          {cached && (
-            <span className="cache-badge">cached ({cacheAge}s / {cacheTTL}s)</span>
-          )}
           <span className="status-time">Updated {lastUpdated.toLocaleTimeString(undefined, { timeZoneName: "short" })}</span>
         </div>
       )}
 
       <div className="region-selector">
-        <button className={`region-btn ${currentRegion === "full" ? "active" : ""}`} onClick={() => setCurrentRegion("full")}>
-          Full Bracket
-        </button>
-        {["east", "south", "west", "midwest"].map((r) => (
-          <button key={r} className={`region-btn ${currentRegion === r ? "active" : ""}`} onClick={() => setCurrentRegion(r)}>
-            {r.charAt(0).toUpperCase() + r.slice(1)}
-          </button>
-        ))}
         {liveGames.length > 0 && (
           <button className={`region-btn live-tab ${currentRegion === "live" ? "active" : ""}`} onClick={() => setCurrentRegion("live")}>
             <span className="live-tab-dot" />
             Live ({liveGames.length})
           </button>
         )}
+        <button className={`region-btn ${currentRegion === "full" ? "active" : ""}`} onClick={() => setCurrentRegion("full")}>
+          Full Bracket
+        </button>
+        <div className="region-dropdown-wrap">
+          <select
+            className="region-dropdown"
+            value={["east","south","west","midwest"].includes(currentRegion) ? currentRegion : "east"}
+            onChange={(e) => setCurrentRegion(e.target.value)}
+          >
+            <option value="east">East</option>
+            <option value="south">South</option>
+            <option value="west">West</option>
+            <option value="midwest">Midwest</option>
+          </select>
+          <button
+            className={`region-btn ${["east","south","west","midwest"].includes(currentRegion) ? "active" : ""}`}
+            onClick={() => {
+              if (!["east","south","west","midwest"].includes(currentRegion)) setCurrentRegion("east");
+            }}
+          >
+            Region
+          </button>
+        </div>
         <button className={`region-btn ${currentRegion === "schedule" ? "active" : ""}`} onClick={() => setCurrentRegion("schedule")}>
           Schedule
         </button>
