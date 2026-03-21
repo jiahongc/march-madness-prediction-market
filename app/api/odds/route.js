@@ -306,16 +306,15 @@ const TEAM_SLUG_MAP = {
   "saint mary's": "stmry", "texas a&m": "txam", "houston": "hou", "idaho": "idaho",
   "arizona": "arz", "long island": "liub", "villanova": "vill", "utah state": "utahst",
   "wisconsin": "wisc", "high point": "hpnt", "arkansas": "ark", "hawai'i": "hawaii",
-  "byu": "byu", "smu/miami oh": "miaoh", "gonzaga": "gnzg", "kennesaw st.": "kenest",
+  "byu": "byu", "texas": "tx", "gonzaga": "gnzg", "kennesaw st.": "kenest",
   "miami": "mia", "missouri": "missr", "purdue": "pur", "queens": "queen",
-  "michigan": "mich", "umbc/howard": "umbc", "georgia": "ga", "saint louis": "stlou",
+  "michigan": "mich", "howard": "how", "georgia": "ga", "saint louis": "stlou",
   "texas tech": "txtech", "akron": "akron", "alabama": "ala", "hofstra": "hofst",
-  "tennessee": "tenn", "nc state/texas": "ncst", "virginia": "vir", "wright st.": "wrght",
+  "tennessee": "tenn", "miami (oh)": "miaoh", "virginia": "vir", "wright st.": "wrght",
   "kentucky": "uk", "santa clara": "sanclr", "iowa state": "iowast", "tennessee st.": "tenst",
-  // ESPN names that may appear as winners
-  "prairie view a&m": "pvam", "miami (oh)": "miaoh", "texas": "tx",
-  "high point": "hpnt", "utah state": "utahst", "texas longhorns": "tx",
-  "miami hurricanes": "mia", "nc state": "ncst",
+  // ESPN display names
+  "prairie view a&m": "pvam", "texas longhorns": "tx",
+  "miami hurricanes": "mia", "howard bison": "how",
 };
 
 function getTeamSlugAbbr(teamName) {
