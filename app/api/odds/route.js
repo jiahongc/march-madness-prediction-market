@@ -642,9 +642,9 @@ export async function GET() {
     fetchChampionshipFutures(),
   ]);
 
-  // Apply live data
+  // Apply Polymarket odds and ESPN round 1 scores
   const oddsUpdated = applyPolymarketOdds(regions, marketData);
-  const { liveCount, finalCount } = espnEvents.length > 0
+  const { liveCount: r1LiveCount, finalCount: r1FinalCount } = espnEvents.length > 0
     ? applyLiveScores(regions, espnEvents)
     : { liveCount: 0, finalCount: 0 };
 
@@ -653,18 +653,7 @@ export async function GET() {
     applyTeamLogos(regions, espnEvents);
   }
 
-  // Build round 2 matchups, fetch their odds, and apply ESPN scores
-  const espnIndex = buildEspnIndex(espnEvents);
-  const uniqueEvents = [...new Set(espnIndex.values())];
-  const allRound2 = [];
-  for (const regionData of Object.values(regions)) {
-    const r2 = buildRound2Matchups(regionData.round1);
-    allRound2.push(...r2);
-  }
-  const round2OddsMap = await fetchRound2Odds(allRound2);
-  const { r2LiveCount, r2FinalCount } = applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents);
-
-  // Fetch today's + tomorrow's games explicitly for the schedule
+  // Fetch today's + tomorrow's games explicitly (ensures fresh live data)
   const todayDate = new Date();
   const tomorrowDate = new Date(todayDate);
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -673,16 +662,29 @@ export async function GET() {
     fetchEspnScoresForDate(fmt(todayDate)),
     fetchEspnScoresForDate(fmt(tomorrowDate)),
   ]);
-  const scheduleEvents = [...todayGames, ...tomorrowGames];
 
-  // Build schedule from today/tomorrow's events, next game from all events
-  const { schedule, nextGame } = buildSchedule([...espnEvents, ...scheduleEvents]);
+  // Merge all ESPN events (historical + today + tomorrow) for score matching
+  const allEspnEvents = [...espnEvents, ...todayGames, ...tomorrowGames];
+  const espnIndex = buildEspnIndex(allEspnEvents);
+  const uniqueEvents = [...new Set(espnIndex.values())];
+
+  // Build round 2 matchups, fetch their odds, and apply ESPN scores
+  const allRound2 = [];
+  for (const regionData of Object.values(regions)) {
+    const r2 = buildRound2Matchups(regionData.round1);
+    allRound2.push(...r2);
+  }
+  const round2OddsMap = await fetchRound2Odds(allRound2);
+  const { r2LiveCount, r2FinalCount } = applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents);
+
+  // Build schedule from all events
+  const { schedule, nextGame } = buildSchedule(allEspnEvents);
 
   const result = {
     regions,
     lastUpdated: new Date().toISOString(),
-    liveGames: liveCount + r2LiveCount,
-    finalGames: finalCount + r2FinalCount,
+    liveGames: r1LiveCount + r2LiveCount,
+    finalGames: r1FinalCount + r2FinalCount,
     oddsUpdated,
     oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
     futures,
