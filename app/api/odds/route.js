@@ -293,6 +293,166 @@ function applyLiveScores(regions, espnEvents) {
   return { liveCount, finalCount };
 }
 
+// ── Build Later Rounds with Auto-discovered Odds ─────────
+// Polymarket slug abbreviation map for common team names
+const TEAM_SLUG_MAP = {
+  "duke": "duke", "siena": "siena", "ohio state": "ohiost", "tcu": "tcu",
+  "st. john's": "stjohn", "northern iowa": "niowa", "kansas": "kan", "ca baptist": "cabap",
+  "louisville": "lou", "south florida": "sfl", "michigan st.": "mst", "n. dakota st.": "ndkst",
+  "ucla": "ucla", "ucf": "ucf", "uconn": "uconn", "furman": "furman",
+  "florida": "fl", "lehigh/pv a&m": "pvam", "clemson": "clmsn", "iowa": "iowa",
+  "vanderbilt": "vand", "mcneese": "mcnst", "nebraska": "nebr", "troy": "troy",
+  "north carolina": "ncar", "vcu": "vcu", "illinois": "ill", "penn": "penn",
+  "saint mary's": "stmry", "texas a&m": "txam", "houston": "hou", "idaho": "idaho",
+  "arizona": "arz", "long island": "liub", "villanova": "vill", "utah state": "utahst",
+  "wisconsin": "wisc", "high point": "hpnt", "arkansas": "ark", "hawai'i": "hawaii",
+  "byu": "byu", "smu/miami oh": "miaoh", "gonzaga": "gnzg", "kennesaw st.": "kenest",
+  "miami": "mia", "missouri": "missr", "purdue": "pur", "queens": "queen",
+  "michigan": "mich", "umbc/howard": "umbc", "georgia": "ga", "saint louis": "stlou",
+  "texas tech": "txtech", "akron": "akron", "alabama": "ala", "hofstra": "hofst",
+  "tennessee": "tenn", "nc state/texas": "ncst", "virginia": "vir", "wright st.": "wrght",
+  "kentucky": "uk", "santa clara": "sanclr", "iowa state": "iowast", "tennessee st.": "tenst",
+  // ESPN names that may appear as winners
+  "prairie view a&m": "pvam", "miami (oh)": "miaoh", "texas": "tx",
+  "high point": "hpnt", "utah state": "utahst", "texas longhorns": "tx",
+  "miami hurricanes": "mia", "nc state": "ncst",
+};
+
+function getTeamSlugAbbr(teamName) {
+  const lower = teamName.toLowerCase();
+  if (TEAM_SLUG_MAP[lower]) return TEAM_SLUG_MAP[lower];
+  // Fallback: first word, lowercased, truncated
+  return lower.split(" ")[0].replace(/[^a-z]/g, "").slice(0, 6);
+}
+
+function getWinnerFromGame(game) {
+  if (!game.liveScore || game.liveScore.status !== "final") return null;
+  const topScore = parseInt(game.liveScore.topScore) || 0;
+  const botScore = parseInt(game.liveScore.bottomScore) || 0;
+  return topScore > botScore ? game.top : game.bottom;
+}
+
+function buildRound2Matchups(round1Games) {
+  const matchups = [];
+  for (let i = 0; i < round1Games.length; i += 2) {
+    const g1 = round1Games[i];
+    const g2 = round1Games[i + 1];
+    if (!g1 || !g2) { matchups.push(null); continue; }
+    const w1 = getWinnerFromGame(g1);
+    const w2 = getWinnerFromGame(g2);
+    if (w1 && w2) {
+      matchups.push({ top: w1, bottom: w2, decided: true });
+    } else if (w1) {
+      matchups.push({ top: w1, bottom: null, decided: false });
+    } else if (w2) {
+      matchups.push({ top: null, bottom: w2, decided: false });
+    } else {
+      matchups.push(null);
+    }
+  }
+  return matchups;
+}
+
+function generateRound2Slugs(round2Matchups, round) {
+  const slugs = [];
+  // Second round dates are typically 2 days after first round
+  const dateGuesses = ["2026-03-21", "2026-03-22", "2026-03-23"];
+
+  for (const matchup of round2Matchups) {
+    if (!matchup?.decided) { slugs.push(null); continue; }
+    const topAbbr = getTeamSlugAbbr(matchup.top.team);
+    const botAbbr = getTeamSlugAbbr(matchup.bottom.team);
+    // Try both orderings and multiple dates
+    const candidates = [];
+    for (const date of dateGuesses) {
+      candidates.push(`cbb-${topAbbr}-${botAbbr}-${date}`);
+      candidates.push(`cbb-${botAbbr}-${topAbbr}-${date}`);
+    }
+    slugs.push(candidates);
+  }
+  return slugs;
+}
+
+async function fetchRound2Odds(round2Matchups) {
+  const slugCandidates = generateRound2Slugs(round2Matchups);
+  const results = new Map(); // matchup index -> { market, slug }
+
+  // Flatten all candidates for parallel fetching
+  const allFetches = [];
+  for (let i = 0; i < slugCandidates.length; i++) {
+    if (!slugCandidates[i]) continue;
+    for (const slug of slugCandidates[i]) {
+      allFetches.push({ index: i, slug });
+    }
+  }
+
+  // Fetch in batches
+  const batchSize = 10;
+  for (let i = 0; i < allFetches.length; i += batchSize) {
+    const batch = allFetches.slice(i, i + batchSize);
+    await Promise.all(batch.map(async ({ index, slug }) => {
+      if (results.has(index)) return; // Already found for this matchup
+      try {
+        const res = await fetch(`${GAMMA_API}/markets?slug=${slug}`, {
+          headers: { Accept: "application/json" }, cache: "no-store",
+        });
+        if (!res.ok) return;
+        const text = await res.text();
+        const data = JSON.parse(text.replace(/[\x00-\x1f]/g, ""));
+        const market = Array.isArray(data) ? data[0] : data;
+        if (market?.outcomePrices && market?.outcomes) {
+          results.set(index, { market, slug });
+        }
+      } catch { /* skip */ }
+    }));
+  }
+
+  return results;
+}
+
+function applyRound2Data(regions, round2OddsMap) {
+  for (const regionData of Object.values(regions)) {
+    const round2 = buildRound2Matchups(regionData.round1);
+    regionData.round2 = round2.map((matchup, i) => {
+      if (!matchup) return null;
+
+      // Find odds for this matchup across all regions
+      const regionIndex = Object.values(regions).indexOf(regionData);
+      const globalIndex = regionIndex * 4 + i;
+      const oddsData = round2OddsMap.get(globalIndex);
+
+      if (oddsData && matchup.decided) {
+        try {
+          const { market, slug } = oddsData;
+          const prices = JSON.parse(market.outcomePrices);
+          const outcomes = typeof market.outcomes === "string"
+            ? JSON.parse(market.outcomes) : (market.outcomes || []);
+
+          const topName = matchup.top.team.toLowerCase();
+          let topPrice = null, botPrice = null;
+
+          for (let j = 0; j < outcomes.length; j++) {
+            const ol = outcomes[j].toLowerCase();
+            if (namesMatch(ol, topName)) topPrice = parseFloat(prices[j]);
+            else botPrice = parseFloat(prices[j]);
+          }
+          if (topPrice == null && botPrice == null) {
+            topPrice = parseFloat(prices[0]);
+            botPrice = parseFloat(prices[1]);
+          } else if (topPrice == null) topPrice = 1 - botPrice;
+          else if (botPrice == null) botPrice = 1 - topPrice;
+
+          matchup.topOdds = topPrice * 100;
+          matchup.bottomOdds = botPrice * 100;
+          matchup.url = `https://polymarket.com/sports/cbb/${slug}`;
+        } catch { /* keep without odds */ }
+      }
+
+      return matchup;
+    });
+  }
+}
+
 // ── Team Logos from ESPN ─────────────────────────────────
 function applyTeamLogos(regions, espnEvents) {
   // Build a map of team name → logo URL from ESPN data
@@ -430,6 +590,15 @@ export async function GET() {
   if (espnEvents.length > 0) {
     applyTeamLogos(regions, espnEvents);
   }
+
+  // Build round 2 matchups and fetch their odds
+  const allRound2 = [];
+  for (const regionData of Object.values(regions)) {
+    const r2 = buildRound2Matchups(regionData.round1);
+    allRound2.push(...r2);
+  }
+  const round2OddsMap = await fetchRound2Odds(allRound2);
+  applyRound2Data(regions, round2OddsMap);
 
   // Find next scheduled game
   const nextGame = findNextGame(espnEvents);

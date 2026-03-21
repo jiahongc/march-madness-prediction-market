@@ -252,10 +252,19 @@ main:has(.full-bracket-scroll) { max-width: none; }
   overflow: hidden; width: 100%; padding: 6px 8px;
 }
 .advanced-slot.decided { border-color: var(--green); border-style: solid; }
+.advanced-slot.decided.has-odds { border-color: var(--accent); }
 .advanced-slot.partial { border-style: dashed; }
 .advanced-team {
-  display: flex; align-items: center; gap: 6px; padding: 2px 0;
+  display: flex; align-items: center; gap: 5px; padding: 2px 0;
 }
+.advanced-team .odds-badge { margin-left: auto; }
+.advanced-bet-link {
+  display: block; text-align: center; font-size: 8px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent-text); padding: 3px 0; margin-top: 2px;
+  border-top: 1px solid var(--divider); text-decoration: none;
+}
+.advanced-bet-link:hover { text-decoration: underline; }
 .advanced-vs {
   font-size: 9px; font-weight: 700; color: var(--text-faint);
   text-align: center; text-transform: uppercase; letter-spacing: 0.05em;

@@ -83,7 +83,8 @@ function buildNextRound(games) {
 
 function calcRegionRounds(regionData) {
   const games = regionData.round1;
-  const r2 = buildNextRound(games);
+  // Use server-provided round2 (with odds) if available, otherwise compute client-side
+  const r2 = regionData.round2 || buildNextRound(games);
   const r3 = buildNextRound(matchupsToGames(r2));
   const r4 = buildNextRound(matchupsToGames(r3));
   return { games, round2: r2, round3: r3, round4: r4 };
@@ -586,20 +587,33 @@ const ConnectorCol = memo(function ConnectorCol({ count, flex, mirrored }) {
 
 // ── Advanced Slot ────────────────────────────────────────
 function AdvancedSlot({ matchup }) {
+  const hasOdds = matchup.topOdds != null && matchup.bottomOdds != null;
+
   if (matchup.decided) {
     return (
-      <div className="advanced-slot decided">
+      <div className={`advanced-slot decided ${hasOdds ? "has-odds" : ""}`}>
         <div className="advanced-team">
           <TeamLogo logo={matchup.top.logo} />
           <SeedBadge seed={matchup.top.seed} />
           <span className="tname">{matchup.top.team}</span>
+          {hasOdds && (
+            <span className={`odds-badge ${oddsClass(matchup.topOdds)}`}>{Math.round(matchup.topOdds)}%</span>
+          )}
         </div>
         <div className="advanced-vs">vs</div>
         <div className="advanced-team">
           <TeamLogo logo={matchup.bottom.logo} />
           <SeedBadge seed={matchup.bottom.seed} />
           <span className="tname">{matchup.bottom.team}</span>
+          {hasOdds && (
+            <span className={`odds-badge ${oddsClass(matchup.bottomOdds)}`}>{Math.round(matchup.bottomOdds)}%</span>
+          )}
         </div>
+        {hasOdds && matchup.url && (
+          <a className="advanced-bet-link" href={matchup.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
+            Bet on Polymarket
+          </a>
+        )}
       </div>
     );
   }
