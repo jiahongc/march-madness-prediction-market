@@ -166,20 +166,20 @@ function FuturesView({ futures }) {
   );
 }
 
-function ScheduleView({ schedule }) {
+function ScheduleView({ schedule, timezone }) {
   if (!schedule || schedule.length === 0) {
-    return <div className="futures-empty">No games scheduled today</div>;
+    return <div className="futures-empty">No games scheduled</div>;
   }
 
   return (
     <div className="schedule-section">
-      <div className="schedule-title">Today&apos;s Games</div>
+      <div className="schedule-title">Today &amp; Tomorrow</div>
       <div className="schedule-grid">
         {schedule.map((game, i) => {
           const t1 = game.teams[0] || {};
           const t2 = game.teams[1] || {};
           const gameTime = new Date(game.time);
-          const timeStr = gameTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+          const timeStr = gameTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: timezone, timeZoneName: "short" });
 
           return (
             <div key={i} className={`schedule-card ${game.status === "live" ? "is-live" : ""} ${game.status === "final" ? "is-final" : ""}`}>
@@ -228,6 +228,7 @@ export default function BracketPage() {
   const [currentRegion, setCurrentRegion] = useState("full");
   const [modalGame, setModalGame] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [timezone, setTimezone] = useState("America/New_York");
   const prevLiveCount = useRef(0);
   const initialLoadDone = useRef(false);
 
@@ -290,7 +291,13 @@ export default function BracketPage() {
     for (const [regionKey, regionData] of Object.entries(regions)) {
       for (const game of regionData.round1) {
         if (isLive(game)) {
-          result.push({ ...game, regionName: regionKey });
+          result.push({ ...game, regionName: regionKey, round: "Round 1" });
+        }
+      }
+      for (const matchup of regionData.round2 || []) {
+        if (matchup && isLive(matchup)) {
+          result.push({ ...matchup, regionName: regionKey, round: "Round 2",
+            topOdds: matchup.topOdds, bottomOdds: matchup.bottomOdds, url: matchup.url });
         }
       }
     }
@@ -336,6 +343,14 @@ export default function BracketPage() {
               </p>
             </div>
           </div>
+          <select className="tz-select" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            <option value="America/New_York">Eastern</option>
+            <option value="America/Chicago">Central</option>
+            <option value="America/Denver">Mountain</option>
+            <option value="America/Los_Angeles">Pacific</option>
+            <option value="America/Anchorage">Alaska</option>
+            <option value="Pacific/Honolulu">Hawaii</option>
+          </select>
         </div>
       </header>
 
@@ -383,7 +398,7 @@ export default function BracketPage() {
 
       <main id="bracket-main">
         {currentRegion === "schedule" ? (
-          <ScheduleView schedule={schedule} />
+          <ScheduleView schedule={schedule} timezone={timezone} />
         ) : isFuturesView ? (
           <FuturesView futures={futures} />
         ) : isFullView ? (

@@ -416,7 +416,10 @@ async function fetchRound2Odds(round2Matchups) {
   return results;
 }
 
-function applyRound2Data(regions, round2OddsMap) {
+function applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents) {
+  let r2LiveCount = 0;
+  let r2FinalCount = 0;
+
   for (const regionData of Object.values(regions)) {
     const round2 = buildRound2Matchups(regionData.round1);
     regionData.round2 = round2.map((matchup, i) => {
@@ -454,9 +457,21 @@ function applyRound2Data(regions, round2OddsMap) {
         } catch { /* keep without odds */ }
       }
 
+      // Apply ESPN live scores to round 2 games
+      if (matchup.decided && espnIndex) {
+        const fakeGame = { top: matchup.top, bottom: matchup.bottom };
+        const score = matchEspnGame(fakeGame, espnIndex, uniqueEvents);
+        if (score && score.status !== "pre") {
+          matchup.liveScore = score;
+          if (score.status === "final") r2FinalCount++;
+          else r2LiveCount++;
+        }
+      }
+
       return matchup;
     });
   }
+  return { r2LiveCount, r2FinalCount };
 }
 
 // ── Team Logos from ESPN ─────────────────────────────────
@@ -638,14 +653,16 @@ export async function GET() {
     applyTeamLogos(regions, espnEvents);
   }
 
-  // Build round 2 matchups and fetch their odds
+  // Build round 2 matchups, fetch their odds, and apply ESPN scores
+  const espnIndex = buildEspnIndex(espnEvents);
+  const uniqueEvents = [...new Set(espnIndex.values())];
   const allRound2 = [];
   for (const regionData of Object.values(regions)) {
     const r2 = buildRound2Matchups(regionData.round1);
     allRound2.push(...r2);
   }
   const round2OddsMap = await fetchRound2Odds(allRound2);
-  applyRound2Data(regions, round2OddsMap);
+  const { r2LiveCount, r2FinalCount } = applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents);
 
   // Fetch today's + tomorrow's games explicitly for the schedule
   const todayDate = new Date();
@@ -664,8 +681,8 @@ export async function GET() {
   const result = {
     regions,
     lastUpdated: new Date().toISOString(),
-    liveGames: liveCount,
-    finalGames: finalCount,
+    liveGames: liveCount + r2LiveCount,
+    finalGames: finalCount + r2FinalCount,
     oddsUpdated,
     oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
     futures,
