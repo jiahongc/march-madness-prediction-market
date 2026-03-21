@@ -180,7 +180,7 @@ export default function BracketPage() {
     futures: [],
     nextGame: null,
   });
-  const [currentRegion, setCurrentRegion] = useState("east");
+  const [currentRegion, setCurrentRegion] = useState("full");
   const [modalGame, setModalGame] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const prevLiveCount = useRef(0);
