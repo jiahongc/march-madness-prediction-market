@@ -30,8 +30,6 @@ function formatPayout(oddsCents) {
 }
 
 function formatScore(score) {
-  if (score === "W") return "\u2713";
-  if (score === "L") return "\u2013";
   return score ?? "-";
 }
 
@@ -50,9 +48,6 @@ function isLive(game) {
 
 function getWinner(game) {
   if (!isFinal(game)) return null;
-  // Handle "W"/"L" from Polymarket-resolved games
-  if (game.liveScore.topScore === "W") return game.top;
-  if (game.liveScore.bottomScore === "W") return game.bottom;
   const topScore = parseInt(game.liveScore.topScore) || 0;
   const botScore = parseInt(game.liveScore.bottomScore) || 0;
   return topScore > botScore ? game.top : game.bottom;
@@ -84,6 +79,14 @@ function buildNextRound(games) {
     }
   }
   return nextRound;
+}
+
+function calcRegionRounds(regionData) {
+  const games = regionData.round1;
+  const r2 = buildNextRound(games);
+  const r3 = buildNextRound(matchupsToGames(r2));
+  const r4 = buildNextRound(matchupsToGames(r3));
+  return { games, round2: r2, round3: r3, round4: r4 };
 }
 
 // ── Shared sub-components ────────────────────────────────
@@ -180,11 +183,8 @@ export default function BracketPage() {
   // Build advancement for later rounds (memoized, skipped on live view)
   const { round2, round3, round4 } = useMemo(() => {
     if (isLiveView || isFullView) return { round2: [], round3: [], round4: [] };
-    const r2 = buildNextRound(games);
-    const r3 = buildNextRound(matchupsToGames(r2));
-    const r4 = buildNextRound(matchupsToGames(r3));
-    return { round2: r2, round3: r3, round4: r4 };
-  }, [games, isLiveView, isFullView]);
+    return calcRegionRounds(regions[currentRegion]);
+  }, [regions, currentRegion, isLiveView, isFullView]);
 
   return (
     <>
@@ -347,15 +347,29 @@ export default function BracketPage() {
   );
 }
 
-// ── Full Bracket View ────────────────────────────────────
-function calcRegionRounds(regionData) {
-  const games = regionData.round1;
-  const r2 = buildNextRound(games);
-  const r3 = buildNextRound(matchupsToGames(r2));
-  const r4 = buildNextRound(matchupsToGames(r3));
-  return { games, round2: r2, round3: r3, round4: r4 };
+// ── Final Four Slot ──────────────────────────────────────
+function FFSlot({ roundA, roundB, labelA, labelB }) {
+  if (roundA?.decided && roundB?.decided) {
+    const winnerA = getWinner({ ...roundA, liveScore: null }) || roundA.top;
+    const winnerB = getWinner({ ...roundB, liveScore: null }) || roundB.top;
+    return (
+      <div className="ff-slot">
+        <AdvancedSlot matchup={{ top: winnerA, bottom: winnerB, decided: true }} />
+      </div>
+    );
+  }
+  return (
+    <div className="ff-slot">
+      <div className="future-slot ff-future">
+        <span>{labelA}</span>
+        <span className="ff-vs">vs</span>
+        <span>{labelB}</span>
+      </div>
+    </div>
+  );
 }
 
+// ── Full Bracket View ────────────────────────────────────
 function FullBracketView({ regions, onGameClick }) {
   const allRounds = useMemo(() => ({
     east: calcRegionRounds(regions.east),
@@ -377,31 +391,11 @@ function FullBracketView({ regions, onGameClick }) {
         <div className="full-bracket-center">
           <div className="ff-label">Final Four</div>
           <div className="ff-slots">
-            <div className="ff-slot">
-              {allRounds.east.round4[0]?.decided && allRounds.south.round4[0]?.decided ? (
-                <AdvancedSlot matchup={{ top: getWinner({ ...allRounds.east.round4[0], top: allRounds.east.round4[0].top, bottom: allRounds.east.round4[0].bottom, liveScore: null }) || allRounds.east.round4[0]?.top, bottom: getWinner({ ...allRounds.south.round4[0], top: allRounds.south.round4[0].top, bottom: allRounds.south.round4[0].bottom, liveScore: null }) || allRounds.south.round4[0]?.top, decided: true }} />
-              ) : (
-                <div className="future-slot ff-future">
-                  <span>{allRounds.east.round4[0] ? "East" : "East"}</span>
-                  <span className="ff-vs">vs</span>
-                  <span>{allRounds.south.round4[0] ? "South" : "South"}</span>
-                </div>
-              )}
-            </div>
+            <FFSlot roundA={allRounds.east.round4[0]} roundB={allRounds.south.round4[0]} labelA="East" labelB="South" />
             <div className="ff-championship">
               <div className="future-slot ff-champ">&#127942; Championship</div>
             </div>
-            <div className="ff-slot">
-              {allRounds.west.round4[0]?.decided && allRounds.midwest.round4[0]?.decided ? (
-                <AdvancedSlot matchup={{ top: getWinner({ ...allRounds.west.round4[0], top: allRounds.west.round4[0].top, bottom: allRounds.west.round4[0].bottom, liveScore: null }) || allRounds.west.round4[0]?.top, bottom: getWinner({ ...allRounds.midwest.round4[0], top: allRounds.midwest.round4[0].top, bottom: allRounds.midwest.round4[0].bottom, liveScore: null }) || allRounds.midwest.round4[0]?.top, decided: true }} />
-              ) : (
-                <div className="future-slot ff-future">
-                  <span>{allRounds.west.round4[0] ? "West" : "West"}</span>
-                  <span className="ff-vs">vs</span>
-                  <span>{allRounds.midwest.round4[0] ? "Midwest" : "Midwest"}</span>
-                </div>
-              )}
-            </div>
+            <FFSlot roundA={allRounds.west.round4[0]} roundB={allRounds.midwest.round4[0]} labelA="West" labelB="Midwest" />
           </div>
         </div>
 
@@ -554,11 +548,6 @@ function MatchupCard({ game, onClick }) {
   const topWon = winner?.abbr === game.top.abbr;
   const botWon = winner?.abbr === game.bottom.abbr;
 
-  function teamRowClass(isWinner, isLoser, isFav) {
-    if (gameOver) return isWinner ? "winner" : "loser";
-    return isFav ? "favorite" : "";
-  }
-
   const topPct = game.topOdds;
   const botPct = game.bottomOdds;
 
@@ -658,12 +647,12 @@ function LiveGameCard({ game, onClick }) {
         <div className={`live-card-team ${topScore > botScore ? "leading" : ""}`}>
           <SeedBadge seed={game.top.seed} />
           <span className="live-card-name">{game.top.team}</span>
-          <span className="live-card-score">{score.topScore ?? "-"}</span>
+          <span className="live-card-score">{formatScore(score.topScore)}</span>
         </div>
         <div className={`live-card-team ${botScore > topScore ? "leading" : ""}`}>
           <SeedBadge seed={game.bottom.seed} />
           <span className="live-card-name">{game.bottom.team}</span>
-          <span className="live-card-score">{score.bottomScore ?? "-"}</span>
+          <span className="live-card-score">{formatScore(score.bottomScore)}</span>
         </div>
       </div>
 

@@ -25,7 +25,7 @@ function collectSlugs(regions) {
 }
 
 async function fetchPolymarketOdds(slugs) {
-  // Fetch all markets in parallel, 4 at a time to be respectful
+  // Fetch all markets in parallel, 8 at a time to be respectful
   const results = new Map();
   const batchSize = 8;
   for (let i = 0; i < slugs.length; i += batchSize) {
@@ -119,19 +119,38 @@ async function fetchEspnScoresForDate(dateStr) {
   }
 }
 
+// Cache past days' scores permanently (they won't change once final)
+const pastDayScores = new Map();
+
 async function fetchAllScores() {
-  // Fetch scores from all tournament days (First Four through today)
   const today = new Date();
+  const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
   const tournamentStart = new Date("2026-03-17");
-  const dates = [];
+  const allEvents = [];
+
+  const datesToFetch = [];
   for (let d = new Date(tournamentStart); d <= today; d.setDate(d.getDate() + 1)) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    dates.push(`${y}${m}${day}`);
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    if (dateStr !== todayStr && pastDayScores.has(dateStr)) {
+      allEvents.push(...pastDayScores.get(dateStr));
+    } else {
+      datesToFetch.push(dateStr);
+    }
   }
-  const results = await Promise.all(dates.map(fetchEspnScoresForDate));
-  return results.flat();
+
+  if (datesToFetch.length > 0) {
+    const results = await Promise.all(datesToFetch.map(fetchEspnScoresForDate));
+    for (let i = 0; i < datesToFetch.length; i++) {
+      const dateStr = datesToFetch[i];
+      const events = results[i];
+      if (dateStr !== todayStr && events.length > 0) {
+        pastDayScores.set(dateStr, events);
+      }
+      allEvents.push(...events);
+    }
+  }
+
+  return allEvents;
 }
 
 function buildEspnIndex(events) {
@@ -169,7 +188,7 @@ function namesMatch(a, b) {
   return false;
 }
 
-function matchEspnGame(game, espnIndex) {
+function matchEspnGame(game, espnIndex, uniqueEvents) {
   const topName = game.top.team.toLowerCase();
   const botName = game.bottom.team.toLowerCase();
   const topAbbr = game.top.abbr?.toLowerCase() || "";
@@ -177,7 +196,7 @@ function matchEspnGame(game, espnIndex) {
 
   // Find ESPN event that has BOTH our teams (avoids ambiguity like "Miami" matching wrong game)
   let espnEvent = null;
-  const allEvents = [...new Set(espnIndex.values())];
+  const allEvents = uniqueEvents;
   for (const ev of allEvents) {
     const comps = ev.competitions?.[0];
     if (!comps) continue;
@@ -253,6 +272,7 @@ function matchEspnGame(game, espnIndex) {
 
 function applyLiveScores(regions, espnEvents) {
   const espnIndex = buildEspnIndex(espnEvents);
+  const uniqueEvents = [...new Set(espnIndex.values())];
   let liveCount = 0;
   let finalCount = 0;
 
@@ -261,7 +281,7 @@ function applyLiveScores(regions, espnEvents) {
     if (!games) continue;
 
     for (const game of games) {
-      const score = matchEspnGame(game, espnIndex);
+      const score = matchEspnGame(game, espnIndex, uniqueEvents);
       if (score && score.status !== "pre") {
         game.liveScore = score;
         if (score.status === "final") finalCount++;
