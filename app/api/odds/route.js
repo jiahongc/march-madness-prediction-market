@@ -51,6 +51,30 @@ async function fetchPolymarketOdds(slugs) {
   return results;
 }
 
+function parseMarketOdds(market, topTeamName) {
+  const prices = JSON.parse(market.outcomePrices);
+  const outcomes = typeof market.outcomes === "string"
+    ? JSON.parse(market.outcomes) : (market.outcomes || []);
+  if (prices.length < 2) return null;
+
+  const topName = topTeamName.toLowerCase();
+  let topPrice = null, botPrice = null;
+
+  for (let i = 0; i < outcomes.length; i++) {
+    const ol = outcomes[i].toLowerCase();
+    if (namesMatch(ol, topName)) topPrice = parseFloat(prices[i]);
+    else if (botPrice == null) botPrice = parseFloat(prices[i]);
+  }
+
+  if (topPrice == null && botPrice == null) {
+    topPrice = parseFloat(prices[0]);
+    botPrice = parseFloat(prices[1]);
+  } else if (topPrice == null) topPrice = 1 - botPrice;
+  else if (botPrice == null) botPrice = 1 - topPrice;
+
+  return { topOdds: topPrice * 100, bottomOdds: botPrice * 100 };
+}
+
 function applyPolymarketOdds(regions, marketData) {
   let updatedCount = 0;
   for (const regionData of Object.values(regions)) {
@@ -58,46 +82,14 @@ function applyPolymarketOdds(regions, marketData) {
       const slug = game.url?.split("/").pop();
       const market = slug && marketData.get(slug);
       if (!market?.outcomePrices) continue;
-
       try {
-        const prices = JSON.parse(market.outcomePrices);
-        const outcomes = typeof market.outcomes === "string"
-          ? JSON.parse(market.outcomes)
-          : (market.outcomes || []);
-        if (prices.length < 2) continue;
-
-        // Match outcomes to our top/bottom teams by name
-        const topName = game.top.team.toLowerCase();
-        const botName = game.bottom.team.toLowerCase();
-
-        let topPrice = null;
-        let botPrice = null;
-
-        for (let i = 0; i < outcomes.length; i++) {
-          const outcomeLower = outcomes[i].toLowerCase();
-          if (outcomeLower.includes(topName) || topName.includes(outcomeLower.split(" ")[0])) {
-            topPrice = parseFloat(prices[i]);
-          } else if (outcomeLower.includes(botName) || botName.includes(outcomeLower.split(" ")[0])) {
-            botPrice = parseFloat(prices[i]);
-          }
+        const odds = parseMarketOdds(market, game.top.team);
+        if (odds) {
+          game.topOdds = odds.topOdds;
+          game.bottomOdds = odds.bottomOdds;
+          updatedCount++;
         }
-
-        // If name matching failed, check abbreviations or fall back to position
-        if (topPrice == null && botPrice == null) {
-          topPrice = parseFloat(prices[0]);
-          botPrice = parseFloat(prices[1]);
-        } else if (topPrice == null) {
-          topPrice = 1 - botPrice;
-        } else if (botPrice == null) {
-          botPrice = 1 - topPrice;
-        }
-
-        game.topOdds = topPrice * 100;
-        game.bottomOdds = botPrice * 100;
-        updatedCount++;
-      } catch {
-        // Keep fallback odds
-      }
+      } catch { /* keep fallback */ }
     }
   }
   return updatedCount;
@@ -122,22 +114,34 @@ async function fetchEspnScoresForDate(dateStr) {
 // Cache past days' scores permanently (they won't change once final)
 const pastDayScores = new Map();
 
+function formatDateESPN(d) {
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
 async function fetchAllScores() {
   const today = new Date();
-  const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+  const todayStr = formatDateESPN(today);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = formatDateESPN(tomorrow);
   const tournamentStart = new Date("2026-03-17");
-  const tournamentEnd = new Date("2026-04-10"); // Championship + buffer
+  const tournamentEnd = new Date("2026-04-10");
   const endDate = today < tournamentEnd ? today : tournamentEnd;
   const allEvents = [];
 
   const datesToFetch = [];
+  // Include tournament dates + tomorrow for schedule
   for (let d = new Date(tournamentStart); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    if (dateStr !== todayStr && pastDayScores.has(dateStr)) {
+    const dateStr = formatDateESPN(d);
+    if (dateStr !== todayStr && dateStr !== tomorrowStr && pastDayScores.has(dateStr)) {
       allEvents.push(...pastDayScores.get(dateStr));
     } else {
       datesToFetch.push(dateStr);
     }
+  }
+  // Also include tomorrow for schedule
+  if (!datesToFetch.includes(tomorrowStr)) {
+    datesToFetch.push(tomorrowStr);
   }
 
   if (datesToFetch.length > 0) {
@@ -149,7 +153,7 @@ async function fetchAllScores() {
       const allFinal = events.length > 0 && events.every((e) =>
         e.status?.type?.name === "STATUS_FINAL"
       );
-      if (dateStr !== todayStr && allFinal) {
+      if (dateStr !== todayStr && dateStr !== tomorrowStr && allFinal) {
         pastDayScores.set(dateStr, events);
       }
       allEvents.push(...events);
@@ -433,27 +437,12 @@ function applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents) {
       if (oddsData && matchup.decided) {
         try {
           const { market, slug } = oddsData;
-          const prices = JSON.parse(market.outcomePrices);
-          const outcomes = typeof market.outcomes === "string"
-            ? JSON.parse(market.outcomes) : (market.outcomes || []);
-
-          const topName = matchup.top.team.toLowerCase();
-          let topPrice = null, botPrice = null;
-
-          for (let j = 0; j < outcomes.length; j++) {
-            const ol = outcomes[j].toLowerCase();
-            if (namesMatch(ol, topName)) topPrice = parseFloat(prices[j]);
-            else botPrice = parseFloat(prices[j]);
+          const odds = parseMarketOdds(market, matchup.top.team);
+          if (odds) {
+            matchup.topOdds = odds.topOdds;
+            matchup.bottomOdds = odds.bottomOdds;
+            matchup.url = `https://polymarket.com/sports/cbb/${slug}`;
           }
-          if (topPrice == null && botPrice == null) {
-            topPrice = parseFloat(prices[0]);
-            botPrice = parseFloat(prices[1]);
-          } else if (topPrice == null) topPrice = 1 - botPrice;
-          else if (botPrice == null) botPrice = 1 - topPrice;
-
-          matchup.topOdds = topPrice * 100;
-          matchup.bottomOdds = botPrice * 100;
-          matchup.url = `https://polymarket.com/sports/cbb/${slug}`;
         } catch { /* keep without odds */ }
       }
 
@@ -653,18 +642,8 @@ export async function GET() {
     applyTeamLogos(regions, espnEvents);
   }
 
-  // Fetch today's + tomorrow's games explicitly (ensures fresh live data)
-  const todayDate = new Date();
-  const tomorrowDate = new Date(todayDate);
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const fmt = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
-  const [todayGames, tomorrowGames] = await Promise.all([
-    fetchEspnScoresForDate(fmt(todayDate)),
-    fetchEspnScoresForDate(fmt(tomorrowDate)),
-  ]);
-
-  // Merge all ESPN events (historical + today + tomorrow) for score matching
-  const allEspnEvents = [...espnEvents, ...todayGames, ...tomorrowGames];
+  // espnEvents already includes today + tomorrow from fetchAllScores
+  const allEspnEvents = espnEvents;
   const espnIndex = buildEspnIndex(allEspnEvents);
   const uniqueEvents = [...new Set(espnIndex.values())];
 

@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { DEFAULT_REGIONS } from "../lib/default-data";
 
+const REGION_KEYS = ["east", "south", "west", "midwest"];
+const ROUND_LABELS = ["Round 1 \u00b7 Mar 19\u201320", "Round 2 \u00b7 Mar 21\u201322", "Sweet 16 \u00b7 Mar 27\u201328", "Elite 8 \u00b7 Mar 29\u201330"];
+
 // ── Helpers ──────────────────────────────────────────────
 function seedClass(s) {
   if (s <= 1) return "seed-1";
@@ -381,7 +384,7 @@ export default function BracketPage() {
         <div className="region-dropdown-wrap">
           <select
             className="region-dropdown"
-            value={["east","south","west","midwest"].includes(currentRegion) ? currentRegion : "east"}
+            value={REGION_KEYS.includes(currentRegion) ? currentRegion : "east"}
             onChange={(e) => setCurrentRegion(e.target.value)}
           >
             <option value="east">East</option>
@@ -390,12 +393,12 @@ export default function BracketPage() {
             <option value="midwest">Midwest</option>
           </select>
           <button
-            className={`region-btn ${["east","south","west","midwest"].includes(currentRegion) ? "active" : ""}`}
+            className={`region-btn ${REGION_KEYS.includes(currentRegion) ? "active" : ""}`}
             onClick={() => {
-              if (!["east","south","west","midwest"].includes(currentRegion)) setCurrentRegion("east");
+              if (!REGION_KEYS.includes(currentRegion)) setCurrentRegion("east");
             }}
           >
-            {["east","south","west","midwest"].includes(currentRegion)
+            {REGION_KEYS.includes(currentRegion)
               ? currentRegion.charAt(0).toUpperCase() + currentRegion.slice(1)
               : "Region"}
           </button>
@@ -432,7 +435,7 @@ export default function BracketPage() {
         <div className="bracket-scroll">
           <div className="bracket">
             <div className="round-col">
-              <div className="round-label">Round 1 · Mar 19–20</div>
+              <div className="round-label">{ROUND_LABELS[0]}</div>
               {games.map((game, i) => (
                 <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
                   <MatchupCard game={game} onClick={() => setModalGame(game)} />
@@ -443,7 +446,7 @@ export default function BracketPage() {
             <ConnectorCol count={4} flex={2} />
 
             <div className="round-col">
-              <div className="round-label">Round 2 · Mar 21–22</div>
+              <div className="round-label">{ROUND_LABELS[1]}</div>
               {round2.map((matchup, i) => (
                 <div key={i} style={{ flex: 2, display: "flex", alignItems: "center" }}>
                   {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -454,7 +457,7 @@ export default function BracketPage() {
             <ConnectorCol count={2} flex={4} />
 
             <div className="round-col">
-              <div className="round-label">Sweet 16 · Mar 27–28</div>
+              <div className="round-label">{ROUND_LABELS[2]}</div>
               {round3.map((matchup, i) => (
                 <div key={i} style={{ flex: 4, display: "flex", alignItems: "center" }}>
                   {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -470,7 +473,7 @@ export default function BracketPage() {
             <ConnectorCol count={1} flex={8} />
 
             <div className="round-col">
-              <div className="round-label">Elite 8 · Mar 29–30</div>
+              <div className="round-label">{ROUND_LABELS[3]}</div>
               <div style={{ flex: 8, display: "flex", alignItems: "center" }}>
                 {round4[0] ? <AdvancedSlot matchup={round4[0]} /> : <div className="future-slot">TBD</div>}
               </div>
@@ -598,7 +601,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
   const cols = (
     <>
       <div className="round-col">
-        <div className="round-label">Round 1 · Mar 19–20</div>
+        <div className="round-label">{ROUND_LABELS[0]}</div>
         {games.map((game, i) => (
           <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
             <MatchupCard game={game} onClick={() => onGameClick(game)} />
@@ -609,7 +612,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={4} flex={2} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Round 2 · Mar 21–22</div>
+        <div className="round-label">{ROUND_LABELS[1]}</div>
         {round2.map((matchup, i) => (
           <div key={i} style={{ flex: 2, display: "flex", alignItems: "center" }}>
             {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -620,7 +623,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={2} flex={4} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Sweet 16 · Mar 27–28</div>
+        <div className="round-label">{ROUND_LABELS[2]}</div>
         {round3.map((matchup, i) => (
           <div key={i} style={{ flex: 4, display: "flex", alignItems: "center" }}>
             {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -636,7 +639,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={1} flex={8} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Elite 8 · Mar 29–30</div>
+        <div className="round-label">{ROUND_LABELS[3]}</div>
         <div style={{ flex: 8, display: "flex", alignItems: "center" }}>
           {round4[0] ? <AdvancedSlot matchup={round4[0]} /> : <div className="future-slot">TBD</div>}
         </div>
