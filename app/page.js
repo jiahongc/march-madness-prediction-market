@@ -29,6 +29,12 @@ function formatPayout(oddsCents) {
   return profit ? "+$" + profit : "\u2014";
 }
 
+function formatScore(score) {
+  if (score === "W") return "\u2713";
+  if (score === "L") return "\u2013";
+  return score ?? "-";
+}
+
 function formatClock(score) {
   return score.period ? `${score.period} ${score.clock}` : "LIVE";
 }
@@ -44,6 +50,9 @@ function isLive(game) {
 
 function getWinner(game) {
   if (!isFinal(game)) return null;
+  // Handle "W"/"L" from Polymarket-resolved games
+  if (game.liveScore.topScore === "W") return game.top;
+  if (game.liveScore.bottomScore === "W") return game.bottom;
   const topScore = parseInt(game.liveScore.topScore) || 0;
   const botScore = parseInt(game.liveScore.bottomScore) || 0;
   return topScore > botScore ? game.top : game.bottom;
@@ -568,7 +577,7 @@ function MatchupCard({ game, onClick }) {
         <SeedBadge seed={game.top.seed} />
         <span className="tname">{game.top.team}</span>
         {gameOver || gameLive ? (
-          <span className={`final-score ${gameLive && topLeading ? "score-leading" : ""}`}>{game.liveScore.topScore ?? "-"}</span>
+          <span className={`final-score ${gameLive && topLeading ? "score-leading" : ""}`}>{formatScore(game.liveScore.topScore)}</span>
         ) : topPct ? (
           <a className={`odds-badge ${oddsClass(topPct)}`} href={game.url} target="_blank" rel="noopener" title="Bet on Polymarket" onClick={(e) => e.stopPropagation()}>
             {Math.round(topPct)}%
@@ -579,7 +588,7 @@ function MatchupCard({ game, onClick }) {
         <SeedBadge seed={game.bottom.seed} />
         <span className="tname">{game.bottom.team}</span>
         {gameOver || gameLive ? (
-          <span className={`final-score ${gameLive && botLeading ? "score-leading" : ""}`}>{game.liveScore.bottomScore ?? "-"}</span>
+          <span className={`final-score ${gameLive && botLeading ? "score-leading" : ""}`}>{formatScore(game.liveScore.bottomScore)}</span>
         ) : botPct ? (
           <a className={`odds-badge ${oddsClass(botPct)}`} href={game.url} target="_blank" rel="noopener" title="Bet on Polymarket" onClick={(e) => e.stopPropagation()}>
             {Math.round(botPct)}%
@@ -710,11 +719,11 @@ function GameModal({ game, onClose }) {
           <div className="modal-final-score">
             <div className={`modal-final-team ${winner?.abbr === game.top.abbr ? "modal-winner" : "modal-loser"}`}>
               <span className="modal-final-name">{game.top.team}</span>
-              <span className="modal-final-points">{game.liveScore.topScore}</span>
+              <span className="modal-final-points">{formatScore(game.liveScore.topScore)}</span>
             </div>
             <div className={`modal-final-team ${winner?.abbr === game.bottom.abbr ? "modal-winner" : "modal-loser"}`}>
               <span className="modal-final-name">{game.bottom.team}</span>
-              <span className="modal-final-points">{game.liveScore.bottomScore}</span>
+              <span className="modal-final-points">{formatScore(game.liveScore.bottomScore)}</span>
             </div>
           </div>
         ) : (

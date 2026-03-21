@@ -214,9 +214,31 @@ export async function GET() {
 
   // Apply live data
   const oddsUpdated = applyPolymarketOdds(regions, marketData);
-  const { liveCount, finalCount } = ncaaGames.length > 0
+  const { liveCount, finalCount: scoreFinalCount } = ncaaGames.length > 0
     ? applyLiveScores(regions, ncaaGames)
     : { liveCount: 0, finalCount: 0 };
+
+  // Mark games as resolved when Polymarket odds are 100/0 but no NCAA score
+  let resolvedCount = 0;
+  for (const regionData of Object.values(regions)) {
+    for (const game of regionData.round1) {
+      if (game.liveScore) continue; // already has score data
+      const top = game.topOdds;
+      const bot = game.bottomOdds;
+      if ((top >= 99 && bot <= 1) || (bot >= 99 && top <= 1)) {
+        const topWon = top > bot;
+        game.liveScore = {
+          status: "final",
+          period: "FINAL",
+          clock: "",
+          topScore: topWon ? "W" : "L",
+          bottomScore: topWon ? "L" : "W",
+        };
+        resolvedCount++;
+      }
+    }
+  }
+  const finalCount = scoreFinalCount + resolvedCount;
 
   const result = {
     regions,
