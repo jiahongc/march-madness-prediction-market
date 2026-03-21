@@ -106,9 +106,8 @@ function applyPolymarketOdds(regions, marketData) {
 // ── NCAA Live Scores ─────────────────────────────────────
 const NCAA_API_BASE = "https://ncaa-api.henrygd.me";
 
-async function fetchNcaaScores() {
+async function fetchNcaaScoresForDate(dateStr) {
   try {
-    const dateStr = new Date().toISOString().split("T")[0];
     const res = await fetch(
       `${NCAA_API_BASE}/scoreboard/basketball-men/d1/${dateStr}`,
       { headers: { Accept: "application/json" }, cache: "no-store" }
@@ -119,6 +118,18 @@ async function fetchNcaaScores() {
   } catch {
     return [];
   }
+}
+
+async function fetchNcaaScores() {
+  // Fetch scores from all tournament days (First Four through today)
+  const today = new Date();
+  const tournamentStart = new Date("2026-03-17"); // First Four
+  const dates = [];
+  for (let d = new Date(tournamentStart); d <= today; d.setDate(d.getDate() + 1)) {
+    dates.push(d.toISOString().split("T")[0]);
+  }
+  const results = await Promise.all(dates.map(fetchNcaaScoresForDate));
+  return results.flat();
 }
 
 function buildNcaaIndex(ncaaGames) {
