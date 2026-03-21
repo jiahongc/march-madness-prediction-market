@@ -217,6 +217,9 @@ export default function BracketPage() {
       )}
 
       <div className="region-selector">
+        <button className={`region-btn ${currentRegion === "full" ? "active" : ""}`} onClick={() => setCurrentRegion("full")}>
+          Full Bracket
+        </button>
         {["east", "south", "west", "midwest"].map((r) => (
           <button key={r} className={`region-btn ${currentRegion === r ? "active" : ""}`} onClick={() => setCurrentRegion(r)}>
             {r.charAt(0).toUpperCase() + r.slice(1)}
@@ -228,9 +231,6 @@ export default function BracketPage() {
             Live ({liveGames.length})
           </button>
         )}
-        <button className={`region-btn ${currentRegion === "full" ? "active" : ""}`} onClick={() => setCurrentRegion("full")}>
-          Full Bracket
-        </button>
       </div>
 
       <main id="bracket-main">
