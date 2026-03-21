@@ -94,6 +94,76 @@ function SeedBadge({ seed }) {
   return <span className={`seed ${seedClass(seed)}`}>{seed}</span>;
 }
 
+function TeamLogo({ logo }) {
+  if (!logo) return null;
+  return <img className="team-logo" src={logo} alt="" width="18" height="18" loading="lazy" />;
+}
+
+function NextGameCountdown({ nextGame }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const gameTime = new Date(nextGame.time);
+  const diff = gameTime - now;
+  if (diff <= 0) return <span>Next game starting soon: {nextGame.teams}</span>;
+
+  const hours = Math.floor(diff / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+  const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+  return (
+    <span className="next-game-countdown">
+      Next tip-off in <strong>{timeStr}</strong> — {nextGame.teams}
+    </span>
+  );
+}
+
+function FuturesView({ futures }) {
+  if (!futures || futures.length === 0) {
+    return <div className="futures-empty">Loading championship futures...</div>;
+  }
+
+  const maxOdds = futures[0]?.odds || 1;
+
+  return (
+    <div className="futures-container">
+      <div className="futures-header">
+        <h2 className="futures-title">Championship Futures</h2>
+        <p className="futures-subtitle">
+          Polymarket odds to win the 2026 NCAA Tournament
+        </p>
+      </div>
+      <div className="futures-grid">
+        {futures.map((f, i) => (
+          <a
+            key={f.slug || i}
+            className={`futures-card ${i < 3 ? "futures-top3" : ""}`}
+            href={`https://polymarket.com/sports/cbb/${f.slug}`}
+            target="_blank"
+            rel="noopener"
+          >
+            <div className="futures-rank">#{i + 1}</div>
+            <div className="futures-team-name">{f.team}</div>
+            <div className="futures-odds">{f.odds}%</div>
+            <div className="futures-bar-track">
+              <div className="futures-bar-fill" style={{ width: `${(f.odds / maxOdds) * 100}%` }} />
+            </div>
+            <div className="futures-payout">
+              +${f.odds > 0 ? ((100 / (f.odds / 100)) - 100).toFixed(0) : "—"} on $100
+            </div>
+            {f.volume > 0 && (
+              <div className="futures-volume">${(f.volume / 1_000_000).toFixed(1)}M volume</div>
+            )}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────
 export default function BracketPage() {
   const [apiData, setApiData] = useState({
@@ -106,6 +176,8 @@ export default function BracketPage() {
     cached: false,
     cacheAge: 0,
     cacheTTL: 30,
+    futures: [],
+    nextGame: null,
   });
   const [currentRegion, setCurrentRegion] = useState("east");
   const [modalGame, setModalGame] = useState(null);
@@ -139,6 +211,8 @@ export default function BracketPage() {
           cached: data.cached,
           cacheAge: data.cacheAge,
           cacheTTL: data.cacheTTL,
+          futures: data.futures || [],
+          nextGame: data.nextGame || null,
         };
       });
     } catch {
@@ -153,7 +227,8 @@ export default function BracketPage() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL } = apiData;
+  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame } = apiData;
+  const isFuturesView = currentRegion === "futures";
 
   // Collect live games across all regions (memoized)
   const liveGames = useMemo(() => {
@@ -178,13 +253,14 @@ export default function BracketPage() {
 
   const isLiveView = currentRegion === "live";
   const isFullView = currentRegion === "full";
-  const games = (isLiveView || isFullView) ? [] : regions[currentRegion].round1;
+  const skipBracket = isLiveView || isFullView || isFuturesView;
+  const games = skipBracket ? [] : regions[currentRegion]?.round1 || [];
 
-  // Build advancement for later rounds (memoized, skipped on live view)
+  // Build advancement for later rounds (memoized, skipped on non-bracket views)
   const { round2, round3, round4 } = useMemo(() => {
-    if (isLiveView || isFullView) return { round2: [], round3: [], round4: [] };
+    if (skipBracket) return { round2: [], round3: [], round4: [] };
     return calcRegionRounds(regions[currentRegion]);
-  }, [regions, currentRegion, isLiveView, isFullView]);
+  }, [regions, currentRegion, skipBracket]);
 
   return (
     <>
@@ -213,6 +289,8 @@ export default function BracketPage() {
           <span className={`status-dot ${liveCount > 0 ? "live" : "stale"}`} />
           {liveCount > 0 ? (
             <span className="source-tag ncaa-tag">{liveCount} bracket {liveCount === 1 ? "game" : "games"} live</span>
+          ) : nextGame ? (
+            <NextGameCountdown nextGame={nextGame} />
           ) : finalCount > 0 ? (
             `${finalCount} bracket ${finalCount === 1 ? "game" : "games"} completed today`
           ) : (
@@ -234,6 +312,9 @@ export default function BracketPage() {
             {r.charAt(0).toUpperCase() + r.slice(1)}
           </button>
         ))}
+        <button className={`region-btn ${currentRegion === "futures" ? "active" : ""}`} onClick={() => setCurrentRegion("futures")}>
+          Futures
+        </button>
         {liveGames.length > 0 && (
           <button className={`region-btn live-tab ${currentRegion === "live" ? "active" : ""}`} onClick={() => setCurrentRegion("live")}>
             <span className="live-tab-dot" />
@@ -243,7 +324,9 @@ export default function BracketPage() {
       </div>
 
       <main id="bracket-main">
-        {isFullView ? (
+        {isFuturesView ? (
+          <FuturesView futures={futures} />
+        ) : isFullView ? (
           <FullBracketView regions={regions} onGameClick={setModalGame} />
         ) : isLiveView ? (
           <div className="live-games-grid">
@@ -554,8 +637,15 @@ function MatchupCard({ game, onClick }) {
   const topLeading = gameLive && parseInt(game.liveScore.topScore) > parseInt(game.liveScore.bottomScore);
   const botLeading = gameLive && parseInt(game.liveScore.bottomScore) > parseInt(game.liveScore.topScore);
 
+  // Upset watch: lower seed (higher number) has > 30% odds
+  const isUpset = !gameOver && !gameLive && (
+    (game.top.seed > game.bottom.seed && topPct > 30) ||
+    (game.bottom.seed > game.top.seed && botPct > 30)
+  );
+
   return (
-    <div className={`matchup ${gameOver ? "matchup-final" : ""} ${gameLive ? "matchup-live" : ""}`} onClick={onClick}>
+    <div className={`matchup ${gameOver ? "matchup-final" : ""} ${gameLive ? "matchup-live" : ""} ${isUpset ? "matchup-upset" : ""}`} onClick={onClick}>
+      {isUpset && <div className="upset-badge">Upset Watch</div>}
       {gameLive && (
         <div className="live-score-bar in-progress">
           <span className="live-pulse" />
@@ -563,6 +653,7 @@ function MatchupCard({ game, onClick }) {
         </div>
       )}
       <div className={`team-row ${gameOver ? (topWon ? "winner" : "loser") : gameLive ? (topLeading ? "leading" : "") : (topPct > botPct ? "favorite" : "")}`}>
+        <TeamLogo logo={game.top.logo} />
         <SeedBadge seed={game.top.seed} />
         <span className="tname">{game.top.team}</span>
         {gameOver || gameLive ? (
@@ -574,6 +665,7 @@ function MatchupCard({ game, onClick }) {
         ) : null}
       </div>
       <div className={`team-row ${gameOver ? (botWon ? "winner" : "loser") : gameLive ? (botLeading ? "leading" : "") : (botPct > topPct ? "favorite" : "")}`}>
+        <TeamLogo logo={game.bottom.logo} />
         <SeedBadge seed={game.bottom.seed} />
         <span className="tname">{game.bottom.team}</span>
         {gameOver || gameLive ? (

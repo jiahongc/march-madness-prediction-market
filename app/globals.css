@@ -147,9 +147,10 @@ main:has(.full-bracket-scroll) { max-width: none; }
 }
 .matchup:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
 .team-row {
-  display: grid; grid-template-columns: 24px 1fr auto; align-items: center;
-  padding: 5px 8px; gap: 6px; min-height: 32px; border-bottom: 1px solid var(--divider);
+  display: grid; grid-template-columns: 18px 24px 1fr auto; align-items: center;
+  padding: 5px 8px; gap: 5px; min-height: 32px; border-bottom: 1px solid var(--divider);
 }
+.team-logo { border-radius: 2px; flex-shrink: 0; object-fit: contain; }
 .team-row:last-child { border-bottom: none; }
 .team-row.favorite { background: var(--favorite-bg); }
 .seed {
@@ -443,6 +444,66 @@ footer a:hover { color: var(--accent); }
 }
 .mobile-card-list .matchup {
   width: 100%;
+}
+
+/* UPSET WATCH */
+.matchup-upset { border-color: #f59e0b; }
+.upset-badge {
+  background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff;
+  font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  text-align: center; padding: 2px 0;
+}
+
+/* NEXT GAME COUNTDOWN */
+.next-game-countdown { font-size: 11px; }
+.next-game-countdown strong { color: var(--accent-text); }
+
+/* CHAMPIONSHIP FUTURES */
+.futures-container { max-width: 900px; margin: 0 auto; }
+.futures-header { text-align: center; margin-bottom: 20px; }
+.futures-title {
+  font-size: 20px; font-weight: 900; margin: 0;
+}
+.futures-subtitle {
+  font-size: 12px; color: var(--text-muted); margin: 4px 0 0;
+}
+.futures-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+.futures-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+  transition: border-color 0.15s, box-shadow 0.15s; text-decoration: none; color: inherit;
+}
+.futures-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+.futures-top3 { border-color: var(--accent); }
+.futures-top3 .futures-rank { color: var(--accent-text); }
+.futures-rank {
+  font-size: 10px; font-weight: 800; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.futures-team-name { font-size: 15px; font-weight: 800; }
+.futures-odds {
+  font-size: 22px; font-weight: 900; font-family: 'JetBrains Mono', monospace;
+  color: var(--accent-text);
+}
+.futures-bar-track {
+  height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden;
+}
+.futures-bar-fill {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.futures-payout {
+  font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  color: var(--green);
+}
+.futures-volume {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+}
+.futures-empty {
+  text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px;
 }
 
 /* RESPONSIVE */

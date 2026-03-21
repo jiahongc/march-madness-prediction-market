@@ -293,6 +293,109 @@ function applyLiveScores(regions, espnEvents) {
   return { liveCount, finalCount };
 }
 
+// ── Team Logos from ESPN ─────────────────────────────────
+function applyTeamLogos(regions, espnEvents) {
+  // Build a map of team name → logo URL from ESPN data
+  const logoMap = new Map();
+  for (const event of espnEvents) {
+    const comps = event.competitions?.[0];
+    if (!comps) continue;
+    for (const c of comps.competitors || []) {
+      const name = c.team?.displayName?.toLowerCase();
+      const shortName = c.team?.shortDisplayName?.toLowerCase();
+      const logo = c.team?.logo;
+      const id = c.team?.id;
+      const logoUrl = logo || (id ? `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png` : null);
+      if (logoUrl) {
+        if (name) logoMap.set(name, logoUrl);
+        if (shortName) logoMap.set(shortName, logoUrl);
+      }
+    }
+  }
+
+  for (const regionData of Object.values(regions)) {
+    for (const game of regionData.round1) {
+      for (const side of [game.top, game.bottom]) {
+        const name = side.team.toLowerCase();
+        for (const [key, url] of logoMap) {
+          if (namesMatch(key, name)) {
+            side.logo = url;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+// ── Championship Futures from Polymarket ─────────────────
+const FUTURES_CACHE = { data: null, timestamp: 0 };
+const FUTURES_TTL_MS = 300_000; // 5 minutes
+
+async function fetchChampionshipFutures() {
+  const now = Date.now();
+  if (FUTURES_CACHE.data && now - FUTURES_CACHE.timestamp < FUTURES_TTL_MS) {
+    return FUTURES_CACHE.data;
+  }
+
+  try {
+    const res = await fetch(
+      "https://gamma-api.polymarket.com/events?slug=2026-ncaa-tournament-winner",
+      { headers: { Accept: "application/json" }, cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const event = Array.isArray(data) ? data[0] : data;
+    if (!event?.markets) return [];
+
+    const futures = event.markets
+      .filter((m) => {
+        const prices = m.outcomePrices ? JSON.parse(m.outcomePrices) : [];
+        return prices.length >= 2 && parseFloat(prices[0]) > 0.005;
+      })
+      .map((m) => {
+        const prices = JSON.parse(m.outcomePrices);
+        return {
+          team: m.groupItemTitle || "Unknown",
+          odds: Math.round(parseFloat(prices[0]) * 1000) / 10,
+          volume: m.volume ? Math.round(parseFloat(m.volume)) : 0,
+          slug: m.slug,
+        };
+      })
+      .sort((a, b) => b.odds - a.odds)
+      .slice(0, 16);
+
+    FUTURES_CACHE.data = futures;
+    FUTURES_CACHE.timestamp = now;
+    return futures;
+  } catch {
+    return FUTURES_CACHE.data || [];
+  }
+}
+
+// ── Next Game Countdown ──────────────────────────────────
+function findNextGame(espnEvents) {
+  const now = new Date();
+  let nextGame = null;
+  let nextTime = Infinity;
+
+  for (const event of espnEvents) {
+    const status = event.status?.type?.name;
+    if (status !== "STATUS_SCHEDULED") continue;
+    const gameTime = new Date(event.date);
+    if (gameTime > now && gameTime.getTime() < nextTime) {
+      nextTime = gameTime.getTime();
+      const comps = event.competitions?.[0];
+      const teams = comps?.competitors || [];
+      nextGame = {
+        time: event.date,
+        teams: teams.map((t) => t.team?.shortDisplayName || t.team?.displayName || "TBD").join(" vs "),
+      };
+    }
+  }
+  return nextGame;
+}
+
 // ── GET handler ──────────────────────────────────────────
 export async function GET() {
   const now = Date.now();
@@ -309,11 +412,12 @@ export async function GET() {
   // Deep clone fallback data so we can mutate it
   const regions = JSON.parse(JSON.stringify(DEFAULT_REGIONS));
 
-  // Fetch Polymarket odds and ESPN scores in parallel
+  // Fetch Polymarket odds, ESPN scores, and championship futures in parallel
   const slugs = collectSlugs(regions);
-  const [marketData, espnEvents] = await Promise.all([
+  const [marketData, espnEvents, futures] = await Promise.all([
     fetchPolymarketOdds(slugs),
     fetchAllScores(),
+    fetchChampionshipFutures(),
   ]);
 
   // Apply live data
@@ -322,6 +426,14 @@ export async function GET() {
     ? applyLiveScores(regions, espnEvents)
     : { liveCount: 0, finalCount: 0 };
 
+  // Apply team logos from ESPN data
+  if (espnEvents.length > 0) {
+    applyTeamLogos(regions, espnEvents);
+  }
+
+  // Find next scheduled game
+  const nextGame = findNextGame(espnEvents);
+
   const result = {
     regions,
     lastUpdated: new Date().toISOString(),
@@ -329,6 +441,8 @@ export async function GET() {
     finalGames: finalCount,
     oddsUpdated,
     oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
+    futures,
+    nextGame,
   };
 
   cache = { data: result, timestamp: now };
