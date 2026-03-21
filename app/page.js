@@ -406,24 +406,33 @@ function MatchupCard({ game, onClick }) {
   const topPct = game.topOdds;
   const botPct = game.bottomOdds;
 
+  const topLeading = gameLive && parseInt(game.liveScore.topScore) > parseInt(game.liveScore.bottomScore);
+  const botLeading = gameLive && parseInt(game.liveScore.bottomScore) > parseInt(game.liveScore.topScore);
+
   return (
-    <div className={`matchup ${gameOver ? "matchup-final" : ""}`} onClick={onClick}>
-      <div className={`team-row ${teamRowClass(topWon, botWon, topPct > botPct)}`}>
+    <div className={`matchup ${gameOver ? "matchup-final" : ""} ${gameLive ? "matchup-live" : ""}`} onClick={onClick}>
+      {gameLive && (
+        <div className="live-score-bar in-progress">
+          <span className="live-pulse" />
+          <span className="live-score-status">{formatClock(game.liveScore)}</span>
+        </div>
+      )}
+      <div className={`team-row ${gameOver ? (topWon ? "winner" : "loser") : gameLive ? (topLeading ? "leading" : "") : (topPct > botPct ? "favorite" : "")}`}>
         <SeedBadge seed={game.top.seed} />
         <span className="tname">{game.top.team}</span>
-        {gameOver ? (
-          <span className="final-score">{game.liveScore.topScore}</span>
+        {gameOver || gameLive ? (
+          <span className={`final-score ${gameLive && topLeading ? "score-leading" : ""}`}>{game.liveScore.topScore ?? "-"}</span>
         ) : topPct ? (
           <a className={`odds-badge ${oddsClass(topPct)}`} href={game.url} target="_blank" rel="noopener" title="Bet on Polymarket" onClick={(e) => e.stopPropagation()}>
             {Math.round(topPct)}%
           </a>
         ) : null}
       </div>
-      <div className={`team-row ${teamRowClass(botWon, topWon, botPct > topPct)}`}>
+      <div className={`team-row ${gameOver ? (botWon ? "winner" : "loser") : gameLive ? (botLeading ? "leading" : "") : (botPct > topPct ? "favorite" : "")}`}>
         <SeedBadge seed={game.bottom.seed} />
         <span className="tname">{game.bottom.team}</span>
-        {gameOver ? (
-          <span className="final-score">{game.liveScore.bottomScore}</span>
+        {gameOver || gameLive ? (
+          <span className={`final-score ${gameLive && botLeading ? "score-leading" : ""}`}>{game.liveScore.bottomScore ?? "-"}</span>
         ) : botPct ? (
           <a className={`odds-badge ${oddsClass(botPct)}`} href={game.url} target="_blank" rel="noopener" title="Bet on Polymarket" onClick={(e) => e.stopPropagation()}>
             {Math.round(botPct)}%
@@ -431,7 +440,7 @@ function MatchupCard({ game, onClick }) {
         ) : null}
       </div>
 
-      {!gameOver && (
+      {!gameOver && !gameLive && (
         <>
           <div className="payout-header">Profit on $100 bet</div>
           <div className="payout-bar">
@@ -449,15 +458,6 @@ function MatchupCard({ game, onClick }) {
             </div>
           </div>
         </>
-      )}
-
-      {gameLive && (
-        <div className="live-score-bar in-progress">
-          <span className="live-score-status">{formatClock(game.liveScore)}</span>
-          <span className="live-score-numbers">
-            {game.top.abbr} {game.liveScore.topScore ?? "-"} — {game.liveScore.bottomScore ?? "-"} {game.bottom.abbr}
-          </span>
-        </div>
       )}
 
       {gameOver && (

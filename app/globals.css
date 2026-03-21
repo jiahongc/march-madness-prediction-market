@@ -173,6 +173,16 @@ main { max-width: 1600px; margin: 0 auto; padding: 16px 20px; }
 .live-score-numbers { font-size: 10px; font-weight: 800; }
 @keyframes score-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
+/* LIVE GAME STATES */
+.matchup-live { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-md); }
+.matchup-live .live-score-bar.in-progress {
+  justify-content: center; gap: 6px; border-top: none; border-bottom: 1px solid var(--divider);
+}
+.matchup-live .live-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-text); animation: pulse 2s infinite; flex-shrink: 0; }
+.team-row.leading { background: var(--accent-bg); }
+.team-row.leading .tname { font-weight: 800; }
+.score-leading { color: var(--accent-text); }
+
 /* FINISHED GAME STATES */
 .matchup-final { opacity: 0.95; }
 .team-row.winner { background: var(--green-bg); }
