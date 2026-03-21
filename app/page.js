@@ -166,6 +166,49 @@ function FuturesView({ futures }) {
   );
 }
 
+function ScheduleView({ schedule }) {
+  if (!schedule || schedule.length === 0) {
+    return <div className="futures-empty">No games scheduled today</div>;
+  }
+
+  return (
+    <div className="schedule-section">
+      <div className="schedule-title">Today&apos;s Games</div>
+      <div className="schedule-grid">
+        {schedule.map((game, i) => {
+          const t1 = game.teams[0] || {};
+          const t2 = game.teams[1] || {};
+          const gameTime = new Date(game.time);
+          const timeStr = gameTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+
+          return (
+            <div key={i} className={`schedule-card ${game.status === "live" ? "is-live" : ""} ${game.status === "final" ? "is-final" : ""}`}>
+              <div className={`schedule-time ${game.status === "live" ? "live-text" : ""}`}>
+                {game.status === "live" ? "LIVE" : game.status === "final" ? "FINAL" : timeStr}
+              </div>
+              <div className="schedule-matchup">
+                {t1.logo && <img src={t1.logo} alt="" width="20" height="20" />}
+                <span>{t1.name}</span>
+                {(game.status === "live" || game.status === "final") && (
+                  <span className="schedule-score">{t1.score}</span>
+                )}
+              </div>
+              <div className="schedule-vs">vs</div>
+              <div className="schedule-matchup">
+                {t2.logo && <img src={t2.logo} alt="" width="20" height="20" />}
+                <span>{t2.name}</span>
+                {(game.status === "live" || game.status === "final") && (
+                  <span className="schedule-score">{t2.score}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────
 export default function BracketPage() {
   const [apiData, setApiData] = useState({
@@ -180,6 +223,7 @@ export default function BracketPage() {
     cacheTTL: 30,
     futures: [],
     nextGame: null,
+    schedule: [],
   });
   const [currentRegion, setCurrentRegion] = useState("full");
   const [modalGame, setModalGame] = useState(null);
@@ -222,6 +266,7 @@ export default function BracketPage() {
           cacheTTL: data.cacheTTL,
           futures: data.futures || [],
           nextGame: data.nextGame || null,
+          schedule: data.schedule || [],
         };
       });
     } catch {
@@ -236,7 +281,7 @@ export default function BracketPage() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame } = apiData;
+  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame, schedule } = apiData;
   const isFuturesView = currentRegion === "futures";
 
   // Collect live games across all regions (memoized)
@@ -283,7 +328,7 @@ export default function BracketPage() {
               <line x1="17" y1="9" x2="14" y2="16" stroke="var(--accent)" strokeWidth="1.5" />
             </svg>
             <div>
-              <h1>March Madness 2026</h1>
+              <h1>March Madness 2026{liveCount > 0 && <span className="header-live-badge">LIVE</span>}</h1>
               <p className="subtitle">
                 Bracket with Polymarket Odds
                 {apiData.oddsSource === "polymarket-live" ? " · Live Odds" : " · Odds as of Mar 16, 2026"}
@@ -333,6 +378,9 @@ export default function BracketPage() {
       </div>
 
       <main id="bracket-main">
+        {schedule.length > 0 && !isFuturesView && (
+          <ScheduleView schedule={schedule} />
+        )}
         {isFuturesView ? (
           <FuturesView futures={futures} />
         ) : isFullView ? (
@@ -354,7 +402,7 @@ export default function BracketPage() {
         <div className="bracket-scroll">
           <div className="bracket">
             <div className="round-col">
-              <div className="round-label">First Round</div>
+              <div className="round-label">Round 1 · Mar 19–20</div>
               {games.map((game, i) => (
                 <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
                   <MatchupCard game={game} onClick={() => setModalGame(game)} />
@@ -365,7 +413,7 @@ export default function BracketPage() {
             <ConnectorCol count={4} flex={2} />
 
             <div className="round-col">
-              <div className="round-label">Second Round</div>
+              <div className="round-label">Round 2 · Mar 21–22</div>
               {round2.map((matchup, i) => (
                 <div key={i} style={{ flex: 2, display: "flex", alignItems: "center" }}>
                   {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -376,7 +424,7 @@ export default function BracketPage() {
             <ConnectorCol count={2} flex={4} />
 
             <div className="round-col">
-              <div className="round-label">Sweet 16</div>
+              <div className="round-label">Sweet 16 · Mar 27–28</div>
               {round3.map((matchup, i) => (
                 <div key={i} style={{ flex: 4, display: "flex", alignItems: "center" }}>
                   {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -392,7 +440,7 @@ export default function BracketPage() {
             <ConnectorCol count={1} flex={8} />
 
             <div className="round-col">
-              <div className="round-label">Elite 8</div>
+              <div className="round-label">Elite 8 · Mar 29–30</div>
               <div style={{ flex: 8, display: "flex", alignItems: "center" }}>
                 {round4[0] ? <AdvancedSlot matchup={round4[0]} /> : <div className="future-slot">TBD</div>}
               </div>
@@ -520,7 +568,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
   const cols = (
     <>
       <div className="round-col">
-        <div className="round-label">First Round</div>
+        <div className="round-label">Round 1 · Mar 19–20</div>
         {games.map((game, i) => (
           <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
             <MatchupCard game={game} onClick={() => onGameClick(game)} />
@@ -531,7 +579,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={4} flex={2} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Round of 32</div>
+        <div className="round-label">Round 2 · Mar 21–22</div>
         {round2.map((matchup, i) => (
           <div key={i} style={{ flex: 2, display: "flex", alignItems: "center" }}>
             {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -542,7 +590,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={2} flex={4} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Sweet 16</div>
+        <div className="round-label">Sweet 16 · Mar 27–28</div>
         {round3.map((matchup, i) => (
           <div key={i} style={{ flex: 4, display: "flex", alignItems: "center" }}>
             {matchup ? <AdvancedSlot matchup={matchup} /> : <div className="future-slot">TBD</div>}
@@ -558,7 +606,7 @@ function HalfBracket({ name, rounds, onGameClick, mirrored }) {
       <ConnectorCol count={1} flex={8} mirrored={mirrored} />
 
       <div className="round-col">
-        <div className="round-label">Elite 8</div>
+        <div className="round-label">Elite 8 · Mar 29–30</div>
         <div style={{ flex: 8, display: "flex", alignItems: "center" }}>
           {round4[0] ? <AdvancedSlot matchup={round4[0]} /> : <div className="future-slot">TBD</div>}
         </div>

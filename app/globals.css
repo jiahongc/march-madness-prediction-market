@@ -113,14 +113,54 @@ header {
   color: var(--text);
   position: relative;
 }
-.logo-area h1::after {
-  content: 'LIVE';
-  position: absolute; top: -6px; right: -36px;
+.header-live-badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 8px; font-weight: 700;
   background: var(--accent); color: white;
-  padding: 2px 5px; border-radius: 3px;
+  padding: 2px 6px; border-radius: 3px;
   letter-spacing: 0.06em;
+  animation: pulse 2s infinite;
+  margin-left: 8px; vertical-align: super;
+}
+
+/* TODAY'S SCHEDULE */
+.schedule-section { max-width: 900px; margin: 0 auto 24px; }
+.schedule-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px; letter-spacing: 0.1em; color: var(--text);
+  margin-bottom: 12px;
+}
+.schedule-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.schedule-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--card-radius); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s;
+}
+.schedule-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.schedule-card.is-live { border-color: var(--accent); border-width: 2px; }
+.schedule-card.is-final { opacity: 0.7; }
+.schedule-time {
+  font-size: 10px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.schedule-time.live-text { color: var(--accent-text); }
+.schedule-matchup {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700;
+}
+.schedule-matchup img { width: 20px; height: 20px; border-radius: 3px; }
+.schedule-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 900; margin-left: auto;
+}
+.schedule-vs {
+  font-size: 9px; color: var(--text-faint); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; padding-left: 28px;
 }
 .subtitle {
   font-size: 11px; color: var(--text-faint); font-weight: 500;

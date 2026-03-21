@@ -550,26 +550,57 @@ async function fetchChampionshipFutures() {
 }
 
 // ── Next Game Countdown ──────────────────────────────────
-function findNextGame(espnEvents) {
+function buildSchedule(espnEvents) {
   const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const schedule = [];
   let nextGame = null;
   let nextTime = Infinity;
 
   for (const event of espnEvents) {
-    const status = event.status?.type?.name;
-    if (status !== "STATUS_SCHEDULED") continue;
+    const statusName = event.status?.type?.name || "";
     const gameTime = new Date(event.date);
-    if (gameTime > now && gameTime.getTime() < nextTime) {
+    const gameDateStr = gameTime.toISOString().split("T")[0];
+    const comps = event.competitions?.[0];
+    const teams = comps?.competitors || [];
+
+    // Build game info
+    const gameInfo = {
+      time: event.date,
+      status: statusName === "STATUS_FINAL" ? "final"
+        : statusName === "STATUS_IN_PROGRESS" || statusName === "STATUS_HALFTIME" ? "live"
+        : "scheduled",
+      teams: teams.map((t) => ({
+        name: t.team?.shortDisplayName || t.team?.displayName || "TBD",
+        seed: t.curatedRank?.current || null,
+        score: t.score || null,
+        logo: t.team?.logo || null,
+        winner: t.winner || false,
+      })),
+    };
+
+    // Include today's and tomorrow's games in schedule
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    if (gameDateStr === todayStr || gameDateStr === tomorrowStr) {
+      schedule.push(gameInfo);
+    }
+
+    // Track next upcoming game
+    if (statusName === "STATUS_SCHEDULED" && gameTime > now && gameTime.getTime() < nextTime) {
       nextTime = gameTime.getTime();
-      const comps = event.competitions?.[0];
-      const teams = comps?.competitors || [];
       nextGame = {
         time: event.date,
         teams: teams.map((t) => t.team?.shortDisplayName || t.team?.displayName || "TBD").join(" vs "),
       };
     }
   }
-  return nextGame;
+
+  // Sort schedule by time
+  schedule.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+  return { schedule, nextGame };
 }
 
 // ── GET handler ──────────────────────────────────────────
@@ -616,8 +647,19 @@ export async function GET() {
   const round2OddsMap = await fetchRound2Odds(allRound2);
   applyRound2Data(regions, round2OddsMap);
 
-  // Find next scheduled game
-  const nextGame = findNextGame(espnEvents);
+  // Fetch today's + tomorrow's games explicitly for the schedule
+  const todayDate = new Date();
+  const tomorrowDate = new Date(todayDate);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const fmt = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  const [todayGames, tomorrowGames] = await Promise.all([
+    fetchEspnScoresForDate(fmt(todayDate)),
+    fetchEspnScoresForDate(fmt(tomorrowDate)),
+  ]);
+  const scheduleEvents = [...todayGames, ...tomorrowGames];
+
+  // Build schedule from today/tomorrow's events, next game from all events
+  const { schedule, nextGame } = buildSchedule([...espnEvents, ...scheduleEvents]);
 
   const result = {
     regions,
@@ -628,6 +670,7 @@ export async function GET() {
     oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
     futures,
     nextGame,
+    schedule,
   };
 
   cache = { data: result, timestamp: now };
