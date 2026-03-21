@@ -609,10 +609,20 @@ function AdvancedSlot({ matchup }) {
             <span className={`odds-badge ${oddsClass(matchup.bottomOdds)}`}>{Math.round(matchup.bottomOdds)}%</span>
           )}
         </div>
-        {hasOdds && matchup.url && (
-          <a className="advanced-bet-link" href={matchup.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>
-            Bet on Polymarket
-          </a>
+        {hasOdds && (
+          <>
+            <div className="payout-header">Profit on $100 bet</div>
+            <div className="payout-bar">
+              <div className="payout-side">
+                <span className="payout-label">{matchup.top.abbr || matchup.top.team.slice(0, 4).toUpperCase()} wins</span>
+                <span className="payout-value">{formatPayout(matchup.topOdds)}</span>
+              </div>
+              <div className="payout-side">
+                <span className="payout-label">{matchup.bottom.abbr || matchup.bottom.team.slice(0, 4).toUpperCase()} wins</span>
+                <span className="payout-value">{formatPayout(matchup.bottomOdds)}</span>
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
