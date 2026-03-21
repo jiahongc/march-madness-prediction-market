@@ -590,11 +590,13 @@ function AdvancedSlot({ matchup }) {
     return (
       <div className="advanced-slot decided">
         <div className="advanced-team">
+          <TeamLogo logo={matchup.top.logo} />
           <SeedBadge seed={matchup.top.seed} />
           <span className="tname">{matchup.top.team}</span>
         </div>
         <div className="advanced-vs">vs</div>
         <div className="advanced-team">
+          <TeamLogo logo={matchup.bottom.logo} />
           <SeedBadge seed={matchup.bottom.seed} />
           <span className="tname">{matchup.bottom.team}</span>
         </div>
@@ -608,6 +610,7 @@ function AdvancedSlot({ matchup }) {
       <div className="advanced-team">
         {known ? (
           <>
+            <TeamLogo logo={known.logo} />
             <SeedBadge seed={known.seed} />
             <span className="tname">{known.team}</span>
           </>
@@ -737,11 +740,13 @@ function LiveGameCard({ game, onClick }) {
 
       <div className="live-card-teams">
         <div className={`live-card-team ${topScore > botScore ? "leading" : ""}`}>
+          <TeamLogo logo={game.top.logo} />
           <SeedBadge seed={game.top.seed} />
           <span className="live-card-name">{game.top.team}</span>
           <span className="live-card-score">{formatScore(score.topScore)}</span>
         </div>
         <div className={`live-card-team ${botScore > topScore ? "leading" : ""}`}>
+          <TeamLogo logo={game.bottom.logo} />
           <SeedBadge seed={game.bottom.seed} />
           <span className="live-card-name">{game.bottom.team}</span>
           <span className="live-card-score">{formatScore(score.bottomScore)}</span>
