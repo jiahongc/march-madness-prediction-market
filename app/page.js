@@ -87,10 +87,10 @@ function buildNextRound(games) {
 
 function calcRegionRounds(regionData) {
   const games = regionData.round1;
-  // Use server-provided round2 (with odds) if available, otherwise compute client-side
+  // Use server-provided data (with odds/scores) if available, otherwise compute client-side
   const r2 = regionData.round2 || buildNextRound(games);
-  const r3 = buildNextRound(matchupsToGames(r2));
-  const r4 = buildNextRound(matchupsToGames(r3));
+  const r3 = regionData.sweet16 || buildNextRound(matchupsToGames(r2));
+  const r4 = regionData.elite8 || buildNextRound(matchupsToGames(r3));
   return { games, round2: r2, round3: r3, round4: r4 };
 }
 
@@ -297,10 +297,16 @@ export default function BracketPage() {
           result.push({ ...game, regionName: regionKey, round: "Round 1" });
         }
       }
-      for (const matchup of regionData.round2 || []) {
-        if (matchup && isLive(matchup)) {
-          result.push({ ...matchup, regionName: regionKey, round: "Round 2",
-            topOdds: matchup.topOdds, bottomOdds: matchup.bottomOdds, url: matchup.url });
+      const laterRounds = [
+        { data: regionData.round2, label: "Round 2" },
+        { data: regionData.sweet16, label: "Sweet 16" },
+        { data: regionData.elite8, label: "Elite 8" },
+      ];
+      for (const { data, label } of laterRounds) {
+        for (const matchup of data || []) {
+          if (matchup && isLive(matchup)) {
+            result.push({ ...matchup, regionName: regionKey, round: label });
+          }
         }
       }
     }

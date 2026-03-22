@@ -334,6 +334,20 @@ function getTeamSlugAbbr(teamName) {
   return lower.split(" ")[0].replace(/[^a-z]/g, "").slice(0, 6);
 }
 
+function buildNextRound(games) {
+  const nextRound = [];
+  for (let i = 0; i < games.length; i += 2) {
+    if (!games[i] || !games[i + 1]) { nextRound.push(null); continue; }
+    const w1 = getWinnerFromGame(games[i]);
+    const w2 = getWinnerFromGame(games[i + 1]);
+    if (w1 && w2) nextRound.push({ top: w1, bottom: w2, decided: true });
+    else if (w1) nextRound.push({ top: w1, bottom: null, decided: false });
+    else if (w2) nextRound.push({ top: null, bottom: w2, decided: false });
+    else nextRound.push(null);
+  }
+  return nextRound;
+}
+
 function getWinnerFromGame(game) {
   if (!game.liveScore || game.liveScore.status !== "final") return null;
   const topScore = parseInt(game.liveScore.topScore) || 0;
@@ -363,16 +377,21 @@ function buildRound2Matchups(round1Games) {
   return matchups;
 }
 
-function generateRound2Slugs(round2Matchups, round) {
-  const slugs = [];
-  // Second round dates are typically 2 days after first round
-  const dateGuesses = ["2026-03-21", "2026-03-22", "2026-03-23"];
+// Date ranges for each round's Polymarket slugs
+const ROUND_DATE_GUESSES = {
+  round2: ["2026-03-21", "2026-03-22", "2026-03-23"],
+  sweet16: ["2026-03-27", "2026-03-28", "2026-03-29"],
+  elite8: ["2026-03-29", "2026-03-30", "2026-03-31"],
+  finalfour: ["2026-04-04", "2026-04-05"],
+  championship: ["2026-04-06", "2026-04-07"],
+};
 
-  for (const matchup of round2Matchups) {
+function generateMatchupSlugs(matchups, dateGuesses) {
+  const slugs = [];
+  for (const matchup of matchups) {
     if (!matchup?.decided) { slugs.push(null); continue; }
     const topAbbr = getTeamSlugAbbr(matchup.top.team);
     const botAbbr = getTeamSlugAbbr(matchup.bottom.team);
-    // Try both orderings and multiple dates
     const candidates = [];
     for (const date of dateGuesses) {
       candidates.push(`cbb-${topAbbr}-${botAbbr}-${date}`);
@@ -383,8 +402,8 @@ function generateRound2Slugs(round2Matchups, round) {
   return slugs;
 }
 
-async function fetchRound2Odds(round2Matchups) {
-  const slugCandidates = generateRound2Slugs(round2Matchups);
+async function fetchMatchupOdds(matchups, dateGuesses) {
+  const slugCandidates = generateMatchupSlugs(matchups, dateGuesses);
   const results = new Map(); // matchup index -> { market, slug }
 
   // Flatten all candidates for parallel fetching
@@ -420,71 +439,121 @@ async function fetchRound2Odds(round2Matchups) {
   return results;
 }
 
-function applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents) {
-  let r2LiveCount = 0;
-  let r2FinalCount = 0;
+// Apply odds and ESPN scores to a list of matchups
+function applyMatchupData(matchups, oddsMap, espnIndex, uniqueEvents, globalOffset) {
+  let liveCount = 0, finalCount = 0;
+  for (let i = 0; i < matchups.length; i++) {
+    const matchup = matchups[i];
+    if (!matchup) continue;
 
-  for (const regionData of Object.values(regions)) {
-    const round2 = buildRound2Matchups(regionData.round1);
-    regionData.round2 = round2.map((matchup, i) => {
-      if (!matchup) return null;
-
-      // Find odds for this matchup across all regions
-      const regionIndex = Object.values(regions).indexOf(regionData);
-      const globalIndex = regionIndex * 4 + i;
-      const oddsData = round2OddsMap.get(globalIndex);
-
-      if (oddsData && matchup.decided) {
-        try {
-          const { market, slug } = oddsData;
-          const odds = parseMarketOdds(market, matchup.top.team);
-          if (odds) {
-            matchup.topOdds = odds.topOdds;
-            matchup.bottomOdds = odds.bottomOdds;
-            matchup.url = `https://polymarket.com/sports/cbb/${slug}`;
-          }
-        } catch { /* keep without odds */ }
-      }
-
-      // Apply ESPN live scores to round 2 games (strict dual-team match only)
-      if (matchup.decided && uniqueEvents) {
-        const topName = matchup.top.team.toLowerCase();
-        const botName = matchup.bottom.team.toLowerCase();
-        const topAbbr = matchup.top.abbr?.toLowerCase() || "";
-        const botAbbr = matchup.bottom.abbr?.toLowerCase() || "";
-
-        // Only match events where BOTH teams appear (avoids matching Round 1 games)
-        let matched = null;
-        for (const ev of uniqueEvents) {
-          const comps = ev.competitions?.[0];
-          if (!comps) continue;
-          const evTeams = comps.competitors || [];
-          let hasTop = false, hasBot = false;
-          for (const t of evTeams) {
-            const tName = t.team?.displayName?.toLowerCase() || "";
-            const tShort = t.team?.shortDisplayName?.toLowerCase() || "";
-            const tAbbr = t.team?.abbreviation?.toLowerCase() || "";
-            if (namesMatch(tName, topName) || namesMatch(tShort, topName) || tAbbr === topAbbr) hasTop = true;
-            if (namesMatch(tName, botName) || namesMatch(tShort, botName) || tAbbr === botAbbr) hasBot = true;
-          }
-          if (hasTop && hasBot) { matched = ev; break; }
+    // Apply Polymarket odds
+    const oddsData = oddsMap?.get(globalOffset + i);
+    if (oddsData && matchup.decided) {
+      try {
+        const { market, slug } = oddsData;
+        const odds = parseMarketOdds(market, matchup.top.team);
+        if (odds) {
+          matchup.topOdds = odds.topOdds;
+          matchup.bottomOdds = odds.bottomOdds;
+          matchup.url = `https://polymarket.com/sports/cbb/${slug}`;
         }
+      } catch { /* skip */ }
+    }
 
-        if (matched) {
-          const fakeGame = { top: matchup.top, bottom: matchup.bottom };
-          const score = matchEspnGame(fakeGame, espnIndex, [matched]);
-          if (score && score.status !== "pre") {
-            matchup.liveScore = score;
-            if (score.status === "final") r2FinalCount++;
-            else r2LiveCount++;
-          }
+    // Apply ESPN scores (strict dual-team match)
+    if (matchup.decided && uniqueEvents) {
+      const topName = matchup.top.team.toLowerCase();
+      const botName = matchup.bottom.team.toLowerCase();
+      const topAbbr = matchup.top.abbr?.toLowerCase() || "";
+      const botAbbr = matchup.bottom.abbr?.toLowerCase() || "";
+      let matched = null;
+      for (const ev of uniqueEvents) {
+        const comps = ev.competitions?.[0];
+        if (!comps) continue;
+        let hasTop = false, hasBot = false;
+        for (const t of comps.competitors || []) {
+          const tName = t.team?.displayName?.toLowerCase() || "";
+          const tShort = t.team?.shortDisplayName?.toLowerCase() || "";
+          const tAbbr = t.team?.abbreviation?.toLowerCase() || "";
+          if (namesMatch(tName, topName) || namesMatch(tShort, topName) || tAbbr === topAbbr) hasTop = true;
+          if (namesMatch(tName, botName) || namesMatch(tShort, botName) || tAbbr === botAbbr) hasBot = true;
+        }
+        if (hasTop && hasBot) { matched = ev; break; }
+      }
+      if (matched) {
+        const score = matchEspnGame({ top: matchup.top, bottom: matchup.bottom }, espnIndex, [matched]);
+        if (score && score.status !== "pre") {
+          matchup.liveScore = score;
+          if (score.status === "final") finalCount++;
+          else liveCount++;
         }
       }
-
-      return matchup;
-    });
+    }
   }
-  return { r2LiveCount, r2FinalCount };
+  return { liveCount, finalCount };
+}
+
+async function buildAllRounds(regions, espnIndex, uniqueEvents) {
+  let totalLive = 0, totalFinal = 0;
+
+  // Build round 2 from round 1 winners
+  const allR2 = [];
+  for (const regionData of Object.values(regions)) {
+    const r2 = buildRound2Matchups(regionData.round1);
+    regionData.round2 = r2;
+    allR2.push(...r2);
+  }
+
+  // Fetch and apply Round 2 odds
+  const r2Odds = await fetchMatchupOdds(allR2, ROUND_DATE_GUESSES.round2);
+  let offset = 0;
+  for (const regionData of Object.values(regions)) {
+    const { liveCount, finalCount } = applyMatchupData(regionData.round2, r2Odds, espnIndex, uniqueEvents, offset);
+    totalLive += liveCount; totalFinal += finalCount;
+    offset += regionData.round2.length;
+  }
+
+  // Build Sweet 16 from round 2 winners
+  const allS16 = [];
+  for (const regionData of Object.values(regions)) {
+    const r2Games = (regionData.round2 || []).filter(m => m?.decided).map(m => ({
+      top: m.top, bottom: m.bottom, liveScore: m.liveScore || null
+    }));
+    const s16 = buildNextRound(r2Games);
+    regionData.sweet16 = s16;
+    allS16.push(...s16);
+  }
+
+  // Fetch and apply Sweet 16 odds
+  const s16Odds = await fetchMatchupOdds(allS16, ROUND_DATE_GUESSES.sweet16);
+  offset = 0;
+  for (const regionData of Object.values(regions)) {
+    const { liveCount, finalCount } = applyMatchupData(regionData.sweet16, s16Odds, espnIndex, uniqueEvents, offset);
+    totalLive += liveCount; totalFinal += finalCount;
+    offset += regionData.sweet16.length;
+  }
+
+  // Build Elite 8 from Sweet 16 winners
+  for (const regionData of Object.values(regions)) {
+    const s16Games = (regionData.sweet16 || []).filter(m => m?.decided).map(m => ({
+      top: m.top, bottom: m.bottom, liveScore: m.liveScore || null
+    }));
+    const e8 = buildNextRound(s16Games);
+    regionData.elite8 = e8;
+  }
+
+  // Fetch and apply Elite 8 odds
+  const allE8 = [];
+  for (const regionData of Object.values(regions)) allE8.push(...(regionData.elite8 || []));
+  const e8Odds = await fetchMatchupOdds(allE8, ROUND_DATE_GUESSES.elite8);
+  offset = 0;
+  for (const regionData of Object.values(regions)) {
+    const { liveCount, finalCount } = applyMatchupData(regionData.elite8 || [], e8Odds, espnIndex, uniqueEvents, offset);
+    totalLive += liveCount; totalFinal += finalCount;
+    offset += (regionData.elite8 || []).length;
+  }
+
+  return { totalLive, totalFinal };
 }
 
 // ── Team Logos from ESPN ─────────────────────────────────
@@ -666,28 +735,21 @@ export async function GET() {
     applyTeamLogos(regions, espnEvents);
   }
 
-  // espnEvents already includes today + tomorrow from fetchAllScores
-  const allEspnEvents = espnEvents;
-  const espnIndex = buildEspnIndex(allEspnEvents);
+  // Build ESPN index for later round matching
+  const espnIndex = buildEspnIndex(espnEvents);
   const uniqueEvents = [...new Set(espnIndex.values())];
 
-  // Build round 2 matchups, fetch their odds, and apply ESPN scores
-  const allRound2 = [];
-  for (const regionData of Object.values(regions)) {
-    const r2 = buildRound2Matchups(regionData.round1);
-    allRound2.push(...r2);
-  }
-  const round2OddsMap = await fetchRound2Odds(allRound2);
-  const { r2LiveCount, r2FinalCount } = applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents);
+  // Build all rounds (R2 → Sweet 16 → Elite 8) with odds and scores
+  const { totalLive: laterLive, totalFinal: laterFinal } = await buildAllRounds(regions, espnIndex, uniqueEvents);
 
   // Build schedule from all events
-  const { schedule, nextGame } = buildSchedule(allEspnEvents);
+  const { schedule, nextGame } = buildSchedule(espnEvents);
 
   const result = {
     regions,
     lastUpdated: new Date().toISOString(),
-    liveGames: r1LiveCount + r2LiveCount,
-    finalGames: r1FinalCount + r2FinalCount,
+    liveGames: r1LiveCount + laterLive,
+    finalGames: r1FinalCount + laterFinal,
     oddsUpdated,
     oddsSource: oddsUpdated > 0 ? "polymarket-live" : "fallback",
     futures,
