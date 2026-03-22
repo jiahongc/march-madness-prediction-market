@@ -60,7 +60,7 @@ function getWinner(game) {
 function matchupsToGames(matchups) {
   return matchups
     .filter((m) => m?.decided)
-    .map((m) => ({ top: m.top, bottom: m.bottom, liveScore: null }));
+    .map((m) => ({ top: m.top, bottom: m.bottom, liveScore: m.liveScore || null }));
 }
 
 function buildNextRound(games) {

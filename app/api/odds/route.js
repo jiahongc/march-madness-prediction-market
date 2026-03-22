@@ -446,14 +446,38 @@ function applyRound2Data(regions, round2OddsMap, espnIndex, uniqueEvents) {
         } catch { /* keep without odds */ }
       }
 
-      // Apply ESPN live scores to round 2 games
-      if (matchup.decided && espnIndex) {
-        const fakeGame = { top: matchup.top, bottom: matchup.bottom };
-        const score = matchEspnGame(fakeGame, espnIndex, uniqueEvents);
-        if (score && score.status !== "pre") {
-          matchup.liveScore = score;
-          if (score.status === "final") r2FinalCount++;
-          else r2LiveCount++;
+      // Apply ESPN live scores to round 2 games (strict dual-team match only)
+      if (matchup.decided && uniqueEvents) {
+        const topName = matchup.top.team.toLowerCase();
+        const botName = matchup.bottom.team.toLowerCase();
+        const topAbbr = matchup.top.abbr?.toLowerCase() || "";
+        const botAbbr = matchup.bottom.abbr?.toLowerCase() || "";
+
+        // Only match events where BOTH teams appear (avoids matching Round 1 games)
+        let matched = null;
+        for (const ev of uniqueEvents) {
+          const comps = ev.competitions?.[0];
+          if (!comps) continue;
+          const evTeams = comps.competitors || [];
+          let hasTop = false, hasBot = false;
+          for (const t of evTeams) {
+            const tName = t.team?.displayName?.toLowerCase() || "";
+            const tShort = t.team?.shortDisplayName?.toLowerCase() || "";
+            const tAbbr = t.team?.abbreviation?.toLowerCase() || "";
+            if (namesMatch(tName, topName) || namesMatch(tShort, topName) || tAbbr === topAbbr) hasTop = true;
+            if (namesMatch(tName, botName) || namesMatch(tShort, botName) || tAbbr === botAbbr) hasBot = true;
+          }
+          if (hasTop && hasBot) { matched = ev; break; }
+        }
+
+        if (matched) {
+          const fakeGame = { top: matchup.top, bottom: matchup.bottom };
+          const score = matchEspnGame(fakeGame, espnIndex, [matched]);
+          if (score && score.status !== "pre") {
+            matchup.liveScore = score;
+            if (score.status === "final") r2FinalCount++;
+            else r2LiveCount++;
+          }
         }
       }
 
