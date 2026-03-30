@@ -313,7 +313,7 @@ export default function BracketPage() {
   const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame, schedule, tournamentPhase, finalFour, championship } = apiData;
   const isFuturesView = currentRegion === "futures";
 
-  // Collect live games across all regions (memoized)
+  // Collect live games across all regions + Final Four + Championship (memoized)
   const liveGames = useMemo(() => {
     const result = [];
     for (const [regionKey, regionData] of Object.entries(regions)) {
@@ -335,8 +335,17 @@ export default function BracketPage() {
         }
       }
     }
+    // Final Four and Championship (cross-region)
+    for (const matchup of finalFour || []) {
+      if (matchup && isLive(matchup)) {
+        result.push({ ...matchup, regionName: "final4", round: "Final Four" });
+      }
+    }
+    if (championship && isLive(championship)) {
+      result.push({ ...championship, regionName: "championship", round: "Championship" });
+    }
     return result;
-  }, [regions]);
+  }, [regions, finalFour, championship]);
 
   // Auto-switch to Live tab when first game tips off
   useEffect(() => {

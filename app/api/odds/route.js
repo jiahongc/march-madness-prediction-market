@@ -543,6 +543,7 @@ const ROUND_ESPN_DATES = {
   sweet16: ["2026-03-26", "2026-03-29"],
   elite8: ["2026-03-28", "2026-03-31"],
   finalfour: ["2026-04-03", "2026-04-06"],
+  championship: ["2026-04-06", "2026-04-08"],
 };
 
 async function buildAllRounds(regions, espnIndex, uniqueEvents) {
@@ -657,7 +658,7 @@ async function buildAllRounds(regions, espnIndex, uniqueEvents) {
     championship = { top: ff1Winner, bottom: ff2Winner, decided: false };
   }
   const champOdds = await fetchMatchupOdds([championship], ROUND_DATE_GUESSES.championship);
-  const { liveCount: champLive, finalCount: champFinal } = applyMatchupData([championship], champOdds, espnIndex, uniqueEvents, 0, ["2026-04-06", "2026-04-08"]);
+  const { liveCount: champLive, finalCount: champFinal } = applyMatchupData([championship], champOdds, espnIndex, uniqueEvents, 0, ROUND_ESPN_DATES.championship);
   totalLive += champLive;
   totalFinal += champFinal;
 
@@ -858,10 +859,12 @@ export async function GET() {
   const todayDate = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
   let tournamentPhase = null;
   if (todayDate < "2026-03-19") tournamentPhase = "Round 1 begins March 19";
-  else if (todayDate > "2026-03-22" && todayDate < "2026-03-27") tournamentPhase = "Sweet 16 begins March 27";
-  else if (todayDate > "2026-03-28" && todayDate < "2026-03-29") tournamentPhase = "Elite 8 begins March 29";
-  else if (todayDate > "2026-03-30" && todayDate < "2026-04-04") tournamentPhase = "Final Four begins April 4";
-  else if (todayDate > "2026-04-05" && todayDate < "2026-04-07") tournamentPhase = "Championship Game on April 7";
+  else if (todayDate >= "2026-03-23" && todayDate < "2026-03-27") tournamentPhase = "Sweet 16 begins March 27";
+  else if (todayDate >= "2026-03-29" && todayDate < "2026-03-29") tournamentPhase = "Elite 8 begins March 29";
+  else if (todayDate >= "2026-03-30" && todayDate < "2026-04-04") tournamentPhase = "Final Four begins April 4";
+  else if (todayDate >= "2026-04-04" && todayDate <= "2026-04-05") tournamentPhase = "Final Four";
+  else if (todayDate >= "2026-04-06" && todayDate < "2026-04-07") tournamentPhase = "Championship Game on April 7";
+  else if (todayDate === "2026-04-07") tournamentPhase = "Championship Game";
 
   const result = {
     regions,
