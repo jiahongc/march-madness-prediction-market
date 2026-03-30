@@ -130,6 +130,12 @@ header {
   font-size: 22px; letter-spacing: 0.1em; color: var(--text);
   margin-bottom: 12px;
 }
+.schedule-date-label {
+  font-size: 0.8rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin: 16px 0 8px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--connector);
+}
 .schedule-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px;
@@ -469,6 +475,9 @@ main:has(.full-bracket-scroll) { max-width: none; }
   border-color: var(--accent); border-width: 2px;
   box-shadow: var(--shadow-glow);
 }
+.advanced-slot.slot-final { border-color: var(--border); opacity: 0.85; }
+.advanced-slot.slot-final .loser .tname { opacity: 0.5; text-decoration: line-through; }
+.advanced-slot.slot-live { border-color: var(--accent); animation: livePulse 2s ease-in-out infinite; }
 .advanced-slot.partial { border-style: dashed; }
 .advanced-team {
   display: flex; align-items: center; gap: 6px; padding: 3px 0;

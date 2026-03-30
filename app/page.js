@@ -171,43 +171,62 @@ function FuturesView({ futures }) {
 
 function ScheduleView({ schedule, timezone }) {
   if (!schedule || schedule.length === 0) {
-    return <div className="futures-empty">No games scheduled</div>;
+    return (
+      <div className="futures-empty">
+        <p>No games scheduled in the next 7 days</p>
+        <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: 4 }}>Sweet 16 begins March 27</p>
+      </div>
+    );
+  }
+
+  // Group games by date
+  const grouped = {};
+  for (const game of schedule) {
+    const gameTime = new Date(game.time);
+    const dateKey = gameTime.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: timezone });
+    if (!grouped[dateKey]) grouped[dateKey] = [];
+    grouped[dateKey].push(game);
   }
 
   return (
     <div className="schedule-section">
-      <div className="schedule-title">Today &amp; Tomorrow</div>
-      <div className="schedule-grid">
-        {schedule.map((game, i) => {
-          const t1 = game.teams[0] || {};
-          const t2 = game.teams[1] || {};
-          const gameTime = new Date(game.time);
-          const timeStr = gameTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: timezone, timeZoneName: "short" });
+      <div className="schedule-title">Upcoming Games</div>
+      {Object.entries(grouped).map(([dateLabel, games]) => (
+        <div key={dateLabel}>
+          <div className="schedule-date-label">{dateLabel}</div>
+          <div className="schedule-grid">
+            {games.map((game, i) => {
+              const t1 = game.teams[0] || {};
+              const t2 = game.teams[1] || {};
+              const gameTime = new Date(game.time);
+              const timeStr = gameTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: timezone, timeZoneName: "short" });
 
-          return (
-            <div key={i} className={`schedule-card ${game.status === "live" ? "is-live" : ""} ${game.status === "final" ? "is-final" : ""}`}>
-              <div className={`schedule-time ${game.status === "live" ? "live-text" : ""}`}>
-                {game.status === "live" ? "LIVE" : game.status === "final" ? "FINAL" : timeStr}
-              </div>
-              <div className="schedule-matchup">
-                {t1.logo && <img src={t1.logo} alt="" width="20" height="20" />}
-                <span>{t1.name}</span>
-                {(game.status === "live" || game.status === "final") && (
-                  <span className="schedule-score">{t1.score}</span>
-                )}
-              </div>
-              <div className="schedule-vs">vs</div>
-              <div className="schedule-matchup">
-                {t2.logo && <img src={t2.logo} alt="" width="20" height="20" />}
-                <span>{t2.name}</span>
-                {(game.status === "live" || game.status === "final") && (
-                  <span className="schedule-score">{t2.score}</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              return (
+                <div key={i} className={`schedule-card ${game.status === "live" ? "is-live" : ""} ${game.status === "final" ? "is-final" : ""}`}>
+                  <div className={`schedule-time ${game.status === "live" ? "live-text" : ""}`}>
+                    {game.status === "live" ? "LIVE" : game.status === "final" ? "FINAL" : timeStr}
+                  </div>
+                  <div className="schedule-matchup">
+                    {t1.logo && <img src={t1.logo} alt="" width="20" height="20" />}
+                    <span>{t1.name}</span>
+                    {(game.status === "live" || game.status === "final") && (
+                      <span className="schedule-score">{t1.score}</span>
+                    )}
+                  </div>
+                  <div className="schedule-vs">vs</div>
+                  <div className="schedule-matchup">
+                    {t2.logo && <img src={t2.logo} alt="" width="20" height="20" />}
+                    <span>{t2.name}</span>
+                    {(game.status === "live" || game.status === "final") && (
+                      <span className="schedule-score">{t2.score}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -227,6 +246,9 @@ export default function BracketPage() {
     futures: [],
     nextGame: null,
     schedule: [],
+    tournamentPhase: null,
+    finalFour: [],
+    championship: null,
   });
   const [currentRegion, setCurrentRegion] = useState("full");
   const [modalGame, setModalGame] = useState(null);
@@ -271,6 +293,9 @@ export default function BracketPage() {
           futures: data.futures || [],
           nextGame: data.nextGame || null,
           schedule: data.schedule || [],
+          tournamentPhase: data.tournamentPhase || null,
+          finalFour: data.finalFour || [],
+          championship: data.championship || null,
         };
       });
     } catch {
@@ -285,7 +310,7 @@ export default function BracketPage() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame, schedule } = apiData;
+  const { regions, lastUpdated, liveGames: liveCount, finalGames: finalCount, cached, cacheAge, cacheTTL, futures, nextGame, schedule, tournamentPhase, finalFour, championship } = apiData;
   const isFuturesView = currentRegion === "futures";
 
   // Collect live games across all regions (memoized)
@@ -368,8 +393,10 @@ export default function BracketPage() {
           <span className={`status-dot stale`} />
           {nextGame ? (
             <NextGameCountdown nextGame={nextGame} />
+          ) : tournamentPhase ? (
+            `Between rounds — ${tournamentPhase}`
           ) : finalCount > 0 ? (
-            `${finalCount} bracket ${finalCount === 1 ? "game" : "games"} completed today`
+            `${finalCount} bracket ${finalCount === 1 ? "game" : "games"} completed`
           ) : (
             "No bracket games in progress"
           )}
@@ -423,7 +450,7 @@ export default function BracketPage() {
         ) : isFuturesView ? (
           <FuturesView futures={futures} />
         ) : isFullView ? (
-          <FullBracketView regions={regions} onGameClick={setModalGame} />
+          <FullBracketView regions={regions} onGameClick={setModalGame} finalFour={finalFour} championship={championship} />
         ) : isLiveView ? (
           <div className="live-games-grid">
             {liveGames.map((game, i) => (
@@ -527,10 +554,17 @@ export default function BracketPage() {
 }
 
 // ── Final Four Slot ──────────────────────────────────────
-function FFSlot({ roundA, roundB, labelA, labelB }) {
-  // roundA/roundB are Elite 8 matchups (round4[0] from each region)
-  // If decided, both teams are known — show who's playing in the Elite 8
-  // The FF matchup is the WINNER of roundA vs WINNER of roundB
+function FFSlot({ roundA, roundB, labelA, labelB, serverMatchup }) {
+  // Use server-provided matchup (with odds/scores) if available
+  if (serverMatchup?.decided) {
+    return (
+      <div className="ff-slot">
+        <AdvancedSlot matchup={serverMatchup} />
+      </div>
+    );
+  }
+
+  // Fallback: compute from E8 winners client-side (no odds)
   const winnerA = roundA?.decided ? getWinner({ top: roundA.top, bottom: roundA.bottom, liveScore: roundA.liveScore || null }) : null;
   const winnerB = roundB?.decided ? getWinner({ top: roundB.top, bottom: roundB.bottom, liveScore: roundB.liveScore || null }) : null;
 
@@ -562,7 +596,7 @@ function FFSlot({ roundA, roundB, labelA, labelB }) {
 }
 
 // ── Full Bracket View ────────────────────────────────────
-function FullBracketView({ regions, onGameClick }) {
+function FullBracketView({ regions, onGameClick, finalFour, championship }) {
   const allRounds = useMemo(() => ({
     east: calcRegionRounds(regions.east),
     south: calcRegionRounds(regions.south),
@@ -583,11 +617,15 @@ function FullBracketView({ regions, onGameClick }) {
         <div className="full-bracket-center">
           <div className="ff-label">Final Four</div>
           <div className="ff-slots">
-            <FFSlot roundA={allRounds.east.round4[0]} roundB={allRounds.south.round4[0]} labelA="East" labelB="South" />
+            <FFSlot roundA={allRounds.east.round4[0]} roundB={allRounds.south.round4[0]} labelA="East" labelB="South" serverMatchup={finalFour?.[0]} />
             <div className="ff-championship">
-              <div className="future-slot ff-champ">&#127942; Championship</div>
+              {championship?.decided ? (
+                <AdvancedSlot matchup={championship} />
+              ) : (
+                <div className="future-slot ff-champ">&#127942; Championship</div>
+              )}
             </div>
-            <FFSlot roundA={allRounds.west.round4[0]} roundB={allRounds.midwest.round4[0]} labelA="West" labelB="Midwest" />
+            <FFSlot roundA={allRounds.west.round4[0]} roundB={allRounds.midwest.round4[0]} labelA="West" labelB="Midwest" serverMatchup={finalFour?.[1]} />
           </div>
         </div>
 
@@ -696,28 +734,49 @@ const ConnectorCol = memo(function ConnectorCol({ count, flex, mirrored }) {
 // ── Advanced Slot ────────────────────────────────────────
 function AdvancedSlot({ matchup }) {
   const hasOdds = matchup.topOdds != null && matchup.bottomOdds != null;
+  const gameOver = matchup.liveScore?.status === "final";
+  const gameLive = matchup.liveScore?.status && matchup.liveScore.status !== "pre" && matchup.liveScore.status !== "final";
+  const winner = gameOver ? getWinner({ top: matchup.top, bottom: matchup.bottom, liveScore: matchup.liveScore }) : null;
+  const topWon = winner && matchup.top && winner.team === matchup.top.team;
+  const botWon = winner && matchup.bottom && winner.team === matchup.bottom.team;
 
   if (matchup.decided) {
     return (
-      <div className={`advanced-slot decided ${hasOdds ? "has-odds" : ""}`}>
-        <div className="advanced-team">
+      <div className={`advanced-slot decided ${hasOdds && !gameOver ? "has-odds" : ""} ${gameOver ? "slot-final" : ""} ${gameLive ? "slot-live" : ""}`}>
+        {gameLive && (
+          <div className="live-score-bar in-progress" style={{ padding: "2px 6px", fontSize: "0.65rem" }}>
+            <span className="live-pulse" />
+            <span className="live-score-status">{formatClock(matchup.liveScore)}</span>
+          </div>
+        )}
+        <div className={`advanced-team ${gameOver ? (topWon ? "winner" : "loser") : ""}`}>
           <TeamLogo logo={matchup.top.logo} />
           <SeedBadge seed={matchup.top.seed} />
           <span className="tname">{matchup.top.team}</span>
-          {hasOdds && (
+          {gameOver || gameLive ? (
+            <span className="final-score">{formatScore(matchup.liveScore.topScore)}</span>
+          ) : hasOdds ? (
             <span className={`odds-badge ${oddsClass(matchup.topOdds)}`}>{Math.round(matchup.topOdds)}%</span>
-          )}
+          ) : null}
         </div>
         <div className="advanced-vs">vs</div>
-        <div className="advanced-team">
+        <div className={`advanced-team ${gameOver ? (botWon ? "winner" : "loser") : ""}`}>
           <TeamLogo logo={matchup.bottom.logo} />
           <SeedBadge seed={matchup.bottom.seed} />
           <span className="tname">{matchup.bottom.team}</span>
-          {hasOdds && (
+          {gameOver || gameLive ? (
+            <span className="final-score">{formatScore(matchup.liveScore.bottomScore)}</span>
+          ) : hasOdds ? (
             <span className={`odds-badge ${oddsClass(matchup.bottomOdds)}`}>{Math.round(matchup.bottomOdds)}%</span>
-          )}
+          ) : null}
         </div>
-        {hasOdds && (
+        {gameOver && (
+          <div className="live-score-bar final" style={{ padding: "2px 6px", fontSize: "0.65rem" }}>
+            <span className="live-score-status">FINAL</span>
+            <span className="live-score-numbers">{winner?.team} advances</span>
+          </div>
+        )}
+        {hasOdds && !gameOver && (
           <>
             <div className="payout-header">Profit on $100 bet</div>
             <div className="payout-bar">

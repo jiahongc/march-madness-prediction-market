@@ -124,13 +124,14 @@ async function fetchAllScores() {
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = formatDateESPN(tomorrow);
-  const tournamentStart = new Date("2026-03-17");
-  const tournamentEnd = new Date("2026-04-10");
+  // Use local dates (not UTC strings) to avoid off-by-one from timezone mismatch
+  const tournamentStart = new Date(2026, 2, 17); // March 17, 2026 local midnight
+  const tournamentEnd = new Date(2026, 3, 10);   // April 10, 2026 local midnight
   const endDate = today < tournamentEnd ? today : tournamentEnd;
   const allEvents = [];
 
   const datesToFetch = [];
-  // Include tournament dates + tomorrow for schedule
+  // Include tournament dates from start to today
   for (let d = new Date(tournamentStart); d <= endDate; d.setDate(d.getDate() + 1)) {
     const dateStr = formatDateESPN(d);
     if (dateStr !== todayStr && dateStr !== tomorrowStr && pastDayScores.has(dateStr)) {
@@ -142,6 +143,16 @@ async function fetchAllScores() {
   // Also include tomorrow for schedule
   if (!datesToFetch.includes(tomorrowStr)) {
     datesToFetch.push(tomorrowStr);
+  }
+  // Include upcoming round dates (up to 7 days ahead) for schedule display
+  const lookAhead = new Date(today);
+  lookAhead.setDate(lookAhead.getDate() + 7);
+  const lookAheadEnd = lookAhead < tournamentEnd ? lookAhead : tournamentEnd;
+  for (let d = new Date(tomorrow); d <= lookAheadEnd; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDateESPN(d);
+    if (!datesToFetch.includes(dateStr)) {
+      datesToFetch.push(dateStr);
+    }
   }
 
   if (datesToFetch.length > 0) {
@@ -182,12 +193,29 @@ function buildEspnIndex(events) {
 }
 
 function namesMatch(a, b) {
-  if (a.includes(b) || b.includes(a)) return true;
+  if (a === b) return true;
   const normalize = (s) => s.replace(/\./g, "").replace(/'/g, "'").trim();
   const an = normalize(a), bn = normalize(b);
-  if (an.includes(bn) || bn.includes(an)) return true;
-  const aFirst = an.split(" ")[0], bFirst = bn.split(" ")[0];
-  if (aFirst.length >= 4 && aFirst === bFirst) return true;
+  if (an === bn) return true;
+
+  // Substring match with "St"/"State" guard:
+  // "tennessee" should NOT match "tennessee st" (different schools)
+  function substringOk(container, sub) {
+    if (!container.includes(sub)) return false;
+    // If the substring is at the start and the next word is "st"/"state"/"a&m", reject
+    if (container.startsWith(sub)) {
+      const rest = container.slice(sub.length).trim();
+      if (/^(st\b|state\b|a&m\b)/i.test(rest)) return false;
+    }
+    return true;
+  }
+
+  if (substringOk(an, bn) || substringOk(bn, an)) return true;
+
+  // First-word match: only when at least one name is a single word
+  const aWords = an.split(" "), bWords = bn.split(" ");
+  const aFirst = aWords[0], bFirst = bWords[0];
+  if (aFirst.length >= 4 && aFirst === bFirst && (aWords.length === 1 || bWords.length === 1)) return true;
   // Handle "SMU/Miami OH" style First Four names — try each part
   if (bn.includes("/")) {
     return bn.split("/").some((part) => namesMatch(a, part.trim()));
@@ -283,6 +311,11 @@ function matchEspnGame(game, espnIndex, uniqueEvents) {
 function applyLiveScores(regions, espnEvents) {
   const espnIndex = buildEspnIndex(espnEvents);
   const uniqueEvents = [...new Set(espnIndex.values())];
+  // Filter to only Round 1 dates (March 19-20) to avoid matching future round games
+  const r1Events = uniqueEvents.filter((ev) => {
+    const evDate = ev.date ? ev.date.split("T")[0] : "";
+    return evDate >= "2026-03-18" && evDate <= "2026-03-21";
+  });
   let liveCount = 0;
   let finalCount = 0;
 
@@ -291,7 +324,7 @@ function applyLiveScores(regions, espnEvents) {
     if (!games) continue;
 
     for (const game of games) {
-      const score = matchEspnGame(game, espnIndex, uniqueEvents);
+      const score = matchEspnGame(game, espnIndex, r1Events);
       if (score && score.status !== "pre") {
         game.liveScore = score;
         if (score.status === "final") finalCount++;
@@ -377,11 +410,11 @@ function buildRound2Matchups(round1Games) {
   return matchups;
 }
 
-// Date ranges for each round's Polymarket slugs
+// Date ranges for each round's Polymarket slugs (uses ET dates in slugs)
 const ROUND_DATE_GUESSES = {
   round2: ["2026-03-21", "2026-03-22", "2026-03-23"],
-  sweet16: ["2026-03-27", "2026-03-28", "2026-03-29"],
-  elite8: ["2026-03-29", "2026-03-30", "2026-03-31"],
+  sweet16: ["2026-03-26", "2026-03-27", "2026-03-28"],
+  elite8: ["2026-03-28", "2026-03-29", "2026-03-30"],
   finalfour: ["2026-04-04", "2026-04-05"],
   championship: ["2026-04-06", "2026-04-07"],
 };
@@ -440,8 +473,18 @@ async function fetchMatchupOdds(matchups, dateGuesses) {
 }
 
 // Apply odds and ESPN scores to a list of matchups
-function applyMatchupData(matchups, oddsMap, espnIndex, uniqueEvents, globalOffset) {
+// roundDateRange: [startDate, endDate] strings like "2026-03-21" to filter ESPN events by date
+function applyMatchupData(matchups, oddsMap, espnIndex, uniqueEvents, globalOffset, roundDateRange) {
   let liveCount = 0, finalCount = 0;
+
+  // Filter ESPN events to only those within this round's date range
+  const filteredEvents = (roundDateRange && uniqueEvents)
+    ? uniqueEvents.filter((ev) => {
+        const evDate = ev.date ? ev.date.split("T")[0] : "";
+        return evDate >= roundDateRange[0] && evDate <= roundDateRange[1];
+      })
+    : uniqueEvents;
+
   for (let i = 0; i < matchups.length; i++) {
     const matchup = matchups[i];
     if (!matchup) continue;
@@ -460,14 +503,14 @@ function applyMatchupData(matchups, oddsMap, espnIndex, uniqueEvents, globalOffs
       } catch { /* skip */ }
     }
 
-    // Apply ESPN scores (strict dual-team match)
-    if (matchup.decided && uniqueEvents) {
+    // Apply ESPN scores (strict dual-team match, filtered by round dates)
+    if (matchup.decided && filteredEvents && filteredEvents.length > 0) {
       const topName = matchup.top.team.toLowerCase();
       const botName = matchup.bottom.team.toLowerCase();
       const topAbbr = matchup.top.abbr?.toLowerCase() || "";
       const botAbbr = matchup.bottom.abbr?.toLowerCase() || "";
       let matched = null;
-      for (const ev of uniqueEvents) {
+      for (const ev of filteredEvents) {
         const comps = ev.competitions?.[0];
         if (!comps) continue;
         let hasTop = false, hasBot = false;
@@ -493,6 +536,15 @@ function applyMatchupData(matchups, oddsMap, espnIndex, uniqueEvents, globalOffs
   return { liveCount, finalCount };
 }
 
+// ESPN date ranges for each round (for filtering score matches to correct round)
+// ESPN event dates are UTC — games broadcast evening ET often have UTC dates one day earlier
+const ROUND_ESPN_DATES = {
+  round2: ["2026-03-20", "2026-03-23"],
+  sweet16: ["2026-03-26", "2026-03-29"],
+  elite8: ["2026-03-28", "2026-03-31"],
+  finalfour: ["2026-04-03", "2026-04-06"],
+};
+
 async function buildAllRounds(regions, espnIndex, uniqueEvents) {
   let totalLive = 0, totalFinal = 0;
 
@@ -508,7 +560,7 @@ async function buildAllRounds(regions, espnIndex, uniqueEvents) {
   const r2Odds = await fetchMatchupOdds(allR2, ROUND_DATE_GUESSES.round2);
   let offset = 0;
   for (const regionData of Object.values(regions)) {
-    const { liveCount, finalCount } = applyMatchupData(regionData.round2, r2Odds, espnIndex, uniqueEvents, offset);
+    const { liveCount, finalCount } = applyMatchupData(regionData.round2, r2Odds, espnIndex, uniqueEvents, offset, ROUND_ESPN_DATES.round2);
     totalLive += liveCount; totalFinal += finalCount;
     offset += regionData.round2.length;
   }
@@ -528,7 +580,7 @@ async function buildAllRounds(regions, espnIndex, uniqueEvents) {
   const s16Odds = await fetchMatchupOdds(allS16, ROUND_DATE_GUESSES.sweet16);
   offset = 0;
   for (const regionData of Object.values(regions)) {
-    const { liveCount, finalCount } = applyMatchupData(regionData.sweet16, s16Odds, espnIndex, uniqueEvents, offset);
+    const { liveCount, finalCount } = applyMatchupData(regionData.sweet16, s16Odds, espnIndex, uniqueEvents, offset, ROUND_ESPN_DATES.sweet16);
     totalLive += liveCount; totalFinal += finalCount;
     offset += regionData.sweet16.length;
   }
@@ -548,12 +600,68 @@ async function buildAllRounds(regions, espnIndex, uniqueEvents) {
   const e8Odds = await fetchMatchupOdds(allE8, ROUND_DATE_GUESSES.elite8);
   offset = 0;
   for (const regionData of Object.values(regions)) {
-    const { liveCount, finalCount } = applyMatchupData(regionData.elite8 || [], e8Odds, espnIndex, uniqueEvents, offset);
+    const { liveCount, finalCount } = applyMatchupData(regionData.elite8 || [], e8Odds, espnIndex, uniqueEvents, offset, ROUND_ESPN_DATES.elite8);
     totalLive += liveCount; totalFinal += finalCount;
     offset += (regionData.elite8 || []).length;
   }
 
-  return { totalLive, totalFinal };
+  // Build Final Four from Elite 8 winners (cross-region)
+  // East vs South, West vs Midwest
+  const regionKeys = Object.keys(regions);
+  const e8Winners = {};
+  for (const key of regionKeys) {
+    const e8 = regions[key].elite8 || [];
+    const game = e8[0];
+    if (game?.liveScore?.status === "final") {
+      const topScore = parseInt(game.liveScore.topScore) || 0;
+      const botScore = parseInt(game.liveScore.bottomScore) || 0;
+      e8Winners[key] = topScore > botScore ? game.top : game.bottom;
+    }
+  }
+
+  const ffMatchups = [];
+  // Semi 1: East vs South
+  const ff1Top = e8Winners.east || null;
+  const ff1Bot = e8Winners.south || null;
+  if (ff1Top && ff1Bot) {
+    ffMatchups.push({ top: ff1Top, bottom: ff1Bot, decided: true });
+  } else {
+    ffMatchups.push({ top: ff1Top, bottom: ff1Bot, decided: false });
+  }
+  // Semi 2: West vs Midwest
+  const ff2Top = e8Winners.west || null;
+  const ff2Bot = e8Winners.midwest || null;
+  if (ff2Top && ff2Bot) {
+    ffMatchups.push({ top: ff2Top, bottom: ff2Bot, decided: true });
+  } else {
+    ffMatchups.push({ top: ff2Top, bottom: ff2Bot, decided: false });
+  }
+
+  // Fetch and apply Final Four odds + ESPN scores
+  const ffOdds = await fetchMatchupOdds(ffMatchups, ROUND_DATE_GUESSES.finalfour);
+  const { liveCount: ffLive, finalCount: ffFinal } = applyMatchupData(ffMatchups, ffOdds, espnIndex, uniqueEvents, 0, ROUND_ESPN_DATES.finalfour);
+  totalLive += ffLive;
+  totalFinal += ffFinal;
+
+  // Build Championship from Final Four winners
+  let championship = null;
+  const ff1Winner = ffMatchups[0]?.liveScore?.status === "final"
+    ? (parseInt(ffMatchups[0].liveScore.topScore) > parseInt(ffMatchups[0].liveScore.bottomScore) ? ffMatchups[0].top : ffMatchups[0].bottom)
+    : null;
+  const ff2Winner = ffMatchups[1]?.liveScore?.status === "final"
+    ? (parseInt(ffMatchups[1].liveScore.topScore) > parseInt(ffMatchups[1].liveScore.bottomScore) ? ffMatchups[1].top : ffMatchups[1].bottom)
+    : null;
+  if (ff1Winner && ff2Winner) {
+    championship = { top: ff1Winner, bottom: ff2Winner, decided: true };
+  } else {
+    championship = { top: ff1Winner, bottom: ff2Winner, decided: false };
+  }
+  const champOdds = await fetchMatchupOdds([championship], ROUND_DATE_GUESSES.championship);
+  const { liveCount: champLive, finalCount: champFinal } = applyMatchupData([championship], champOdds, espnIndex, uniqueEvents, 0, ["2026-04-06", "2026-04-08"]);
+  totalLive += champLive;
+  totalFinal += champFinal;
+
+  return { totalLive, totalFinal, finalFour: ffMatchups, championship };
 }
 
 // ── Team Logos from ESPN ─────────────────────────────────
@@ -676,11 +784,11 @@ function buildSchedule(espnEvents) {
       })),
     };
 
-    // Include today's and tomorrow's games in schedule
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
-    if (gameDateStr === todayStr || gameDateStr === tomorrowStr) {
+    // Include games within the next 7 days in schedule
+    const weekAhead = new Date(now);
+    weekAhead.setDate(weekAhead.getDate() + 7);
+    const weekAheadStr = weekAhead.toISOString().split("T")[0];
+    if (gameDateStr >= todayStr && gameDateStr <= weekAheadStr) {
       schedule.push(gameInfo);
     }
 
@@ -739,14 +847,26 @@ export async function GET() {
   const espnIndex = buildEspnIndex(espnEvents);
   const uniqueEvents = [...new Set(espnIndex.values())];
 
-  // Build all rounds (R2 → Sweet 16 → Elite 8) with odds and scores
-  const { totalLive: laterLive, totalFinal: laterFinal } = await buildAllRounds(regions, espnIndex, uniqueEvents);
+  // Build all rounds (R2 → Sweet 16 → Elite 8 → Final Four → Championship) with odds and scores
+  const { totalLive: laterLive, totalFinal: laterFinal, finalFour, championship } = await buildAllRounds(regions, espnIndex, uniqueEvents);
 
   // Build schedule from all events
   const { schedule, nextGame } = buildSchedule(espnEvents);
 
+  // Determine current tournament phase for status message (use local date, not UTC)
+  const localNow = new Date();
+  const todayDate = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
+  let tournamentPhase = null;
+  if (todayDate < "2026-03-19") tournamentPhase = "Round 1 begins March 19";
+  else if (todayDate > "2026-03-22" && todayDate < "2026-03-27") tournamentPhase = "Sweet 16 begins March 27";
+  else if (todayDate > "2026-03-28" && todayDate < "2026-03-29") tournamentPhase = "Elite 8 begins March 29";
+  else if (todayDate > "2026-03-30" && todayDate < "2026-04-04") tournamentPhase = "Final Four begins April 4";
+  else if (todayDate > "2026-04-05" && todayDate < "2026-04-07") tournamentPhase = "Championship Game on April 7";
+
   const result = {
     regions,
+    finalFour: finalFour || [],
+    championship: championship || null,
     lastUpdated: new Date().toISOString(),
     liveGames: r1LiveCount + laterLive,
     finalGames: r1FinalCount + laterFinal,
@@ -755,6 +875,7 @@ export async function GET() {
     futures,
     nextGame,
     schedule,
+    tournamentPhase,
   };
 
   cache = { data: result, timestamp: now };
