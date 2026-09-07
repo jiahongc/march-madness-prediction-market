@@ -1,48 +1,51 @@
-# March Madness 2026 — Live Bracket with Polymarket Odds
+# March Madness 2026
 
-**[View Live](https://march-madness-prediction-market.vercel.app)**
+A bracket dashboard for the 2026 NCAA tournament, with Polymarket odds, estimated payout displays, and game-score updates.
 
-A live NCAA March Madness bracket dashboard showing Polymarket odds, $100 payout calculations, and live game scores.
+[Open the dashboard](https://march-madness-prediction-market.vercel.app)
 
 ## Features
 
-- **Polymarket odds** with $100 payout calculator for every first-round matchup
-- **Live NCAA scores** — in-progress scores, final results, period and game clock
-- **Auto-refresh** — scores update every 60 seconds in the background
-- **Live tab** — when bracket games are in progress, a dedicated live view appears with large score cards
-- **Winner advancement** — completed games populate the next round automatically
-- **Region tabs** — East, South, West, Midwest
-- **Game detail modal** — click any matchup for expanded odds and direct Polymarket links
+- Regional brackets and winner advancement.
+- Matchup details with odds and links to corresponding markets.
+- A live-game view when games are in progress.
+- Periodic client refreshes for scores and market data.
 
-## How It Works
+## Data and freshness
 
-- **Odds** are sourced from [Polymarket](https://polymarket.com/sports/cbb/games)
-- **Live scores** are fetched from the [NCAA API](https://github.com/henrygd/ncaa-api) (free, public)
-- Server caches responses for 30 seconds — even with many concurrent users, at most 1 API call per 30 seconds
-- When a game finishes, odds and payouts are replaced by the final score, and the winner advances to the next round
+The app is configured for the **2026 tournament**. It does not automatically create brackets for a new season.
 
-## Local Development
+[`app/api/odds/route.js`](app/api/odds/route.js) combines Polymarket's Gamma API with ESPN score data and an NCAA API fallback. [`lib/default-data.js`](lib/default-data.js) supplies the initial bracket and fallback values.
+
+The server caches the combined response for 30 seconds per process. Refreshing it can make multiple upstream requests, and separate server instances maintain separate caches. Failed requests can leave fallback values in place; a rendered bracket alone does not prove every price or score is current.
+
+## Run locally
+
+With Node.js and npm installed, run from the repository root:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). No API keys required.
+Open [localhost:3000](http://localhost:3000). The current public-data integrations do not require API keys.
 
-## Project Structure
+## Production build
 
-```
-app/
-  layout.js            Root layout with metadata
-  page.js              Main bracket page (client component)
-  globals.css          All styling
-  icon.svg             Favicon
-  api/odds/route.js    API route — fetches and caches NCAA live scores
-lib/
-  default-data.js      Polymarket odds and links for all 32 first-round games
+```bash
+npm run build
+npm start
 ```
 
-## Built With
+No automated test or lint script is currently configured.
 
-[Next.js](https://nextjs.org) · [React](https://react.dev) · [Vercel](https://vercel.com)
+## Repository guide
+
+| Path | Purpose |
+| --- | --- |
+| `app/page.js` | Bracket interface and client refreshes |
+| `app/globals.css` | Styles |
+| `app/api/odds/route.js` | Market and score aggregation |
+| `lib/default-data.js` | Tournament structure and fallback data |
+
+Built with Next.js and React. Market displays are estimates; the app does not execute trades.
